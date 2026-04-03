@@ -1,0 +1,19 @@
+{
+  "name": "casino-cli",
+  "version": "0.1.0",
+  "module": "src/index.ts",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "casino": "src/index.ts"
+  },
+  "scripts": {
+    "start": "bun src/index.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
