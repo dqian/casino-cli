@@ -17,6 +17,7 @@ export const blue = `${ESC}34m`;
 export const magenta = `${ESC}35m`;
 export const cyan = `${ESC}36m`;
 export const white = `${ESC}37m`;
+export const black = `${ESC}30m`;
 export const gray = `${ESC}90m`;
 
 export const bgRed = `${ESC}41m`;

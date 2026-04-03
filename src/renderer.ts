@@ -1,9 +1,9 @@
 import type { AppState, MenuItem } from "./types";
 import * as t from "./theme";
-import { renderRouletteScreen } from "./roulette/renderer";
+import { renderRouletteScreen, renderHotkeyGrid } from "./roulette/renderer";
 
 export const MENU_ITEMS: MenuItem[] = [
-  { name: "Roulette", screen: "roulette", label: "European Roulette - Single Zero" },
+  { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
   { name: "Blackjack", screen: null, label: "Coming Soon" },
   { name: "Craps", screen: null, label: "Coming Soon" },
 ];
@@ -65,14 +65,36 @@ function renderMenuScreen(state: AppState): void {
     } else {
       line = `${t.white}    ${item.name}${t.reset}  ${t.gray}${item.label}${t.reset}`;
     }
-    lines.push(centerAnsiText(line, width));
+    const menuIndent = Math.max(4, Math.floor((width - 48) / 2));
+    lines.push(" ".repeat(menuIndent) + "    " + line);
     if (i < MENU_ITEMS.length - 1) lines.push("");
   }
 
   lines.push("");
   lines.push(centerAnsiText(`${t.gray}${"─".repeat(40)}${t.reset}`, width));
   lines.push("");
-  lines.push(centerAnsiText(`${t.gray}↑/↓:select  Enter:play  q:quit${t.reset}`, width));
+
+  // Hotkey grid as bottom border to menu options
+  const menuKeys: { key: string; label: string }[] = [
+    { key: "↑↓", label: "Select" },
+    { key: "Enter", label: "Play" },
+    { key: "q", label: "Quit" },
+  ];
+  const maxKey = Math.max(...menuKeys.map(h => h.key.length));
+  const maxLabel = Math.max(...menuKeys.map(h => h.label.length));
+  const cellW = maxKey + 2 + maxLabel + 2;
+  const cols = Math.max(1, Math.floor(40 / cellW));
+  const hotkeyRows = Math.ceil(menuKeys.length / cols);
+  for (let r = 0; r < hotkeyRows; r++) {
+    let line = "";
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      if (idx >= menuKeys.length) break;
+      const h = menuKeys[idx]!;
+      line += `${t.white}${t.bold}${h.key.padStart(maxKey)}${t.reset}  ${t.gray}${h.label.padEnd(maxLabel)}${t.reset}    `;
+    }
+    lines.push(centerAnsiText(line, width));
+  }
 
   if (state.message) {
     lines.push("");
@@ -87,10 +109,21 @@ function renderMenuScreen(state: AppState): void {
 }
 
 function renderGameScreen(state: AppState): void {
-  const { rows: height } = process.stdout;
+  const { columns: width, rows: height } = process.stdout;
   const lines = renderRouletteScreen(state);
 
-  // Fill remaining
+  // Render hotkey grid at bottom
+  const hotkeyLines = renderHotkeyGrid(width, state.roulette.phase);
+  const hotkeyHeight = hotkeyLines.length + 1; // +1 for separator
+
+  // Fill space between content and hotkeys
+  while (lines.length < height - hotkeyHeight) lines.push("");
+
+  // Separator + hotkeys
+  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+  lines.push(...hotkeyLines);
+
+  // Trim to terminal height
   while (lines.length < height) lines.push("");
 
   writeLines(lines, height);

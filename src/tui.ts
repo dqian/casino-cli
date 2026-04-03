@@ -1,9 +1,9 @@
-import type { AppState, RouletteState } from "./types";
+import type { AppState, RouletteState, CursorZone } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
-import { placeBet, clearBets, spin, newRound, totalBets } from "./roulette/game";
-import { BOARD_ROWS, BOARD_COLS } from "./roulette/board";
+import { placeBet, removeBet, clearBets, spin, newRound, totalBets } from "./roulette/game";
+import { VGRID_ROWS, VGRID_COLS } from "./roulette/board";
 
 const CHIP_SIZES = [1, 5, 10, 25, 50, 100, 500];
 
@@ -12,13 +12,15 @@ function createRouletteState(): RouletteState {
     phase: "betting",
     bets: [],
     betAmount: 10,
-    cursorRow: 2,
-    cursorCol: 5,
+    cursorZone: "grid",
+    cursorVR: 0,
+    cursorVC: 0,
     result: null,
     spinFrame: 0,
     spinTarget: 0,
     spinHighlight: 0,
     winAmount: 0,
+    spinHistory: [],
     showResultTimer: null,
   };
 }
@@ -52,7 +54,6 @@ export function startTui(): void {
   process.stdin.setRawMode(true);
   process.stdin.resume();
   process.stdin.setEncoding("utf-8");
-  // Alt screen + hide cursor + disable mouse scroll passthrough
   process.stdout.write(t.altScreenOn + t.hideCursor);
 
   const render = () => renderScreen(state);
@@ -72,7 +73,6 @@ export function startTui(): void {
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data, "utf-8");
     const key = parseKey(buf);
 
-    // Ctrl+C always exits
     if (key.ctrl && key.name === "c") {
       exit();
       return;
@@ -120,40 +120,46 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
 function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, render: () => void): void {
   const rs = state.roulette;
 
-  // During spinning, ignore all input
-  if (rs.phase === "spinning") return;
-
-  // Result phase: Enter for new round, Esc to go back
-  if (rs.phase === "result") {
+  if (rs.phase === "spinning") {
     if (key.name === "return") {
+      // Skip to result
+      rs.spinFrame = 9999;
+    }
+    return;
+  }
+
+  if (rs.phase === "result") {
+    if (key.name === "return" || key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
       newRound(state);
-    } else if (key.name === "escape") {
+    } else if (key.name === "escape" || key.name === "q") {
       state.screen = "menu";
       state.message = "";
     }
     return;
   }
 
-  // Betting phase
   switch (key.name) {
     case "up":
-      navigateBoard(rs, -1, 0);
+      navigateUp(rs);
       state.message = "";
       break;
     case "down":
-      navigateBoard(rs, 1, 0);
+      navigateDown(rs);
       state.message = "";
       break;
     case "left":
-      navigateBoard(rs, 0, -1);
+      navigateLeft(rs);
       state.message = "";
       break;
     case "right":
-      navigateBoard(rs, 0, 1);
+      navigateRight(rs);
       state.message = "";
       break;
     case " ":
       placeBet(state);
+      break;
+    case "x":
+      removeBet(state);
       break;
     case "return":
       spin(state, render);
@@ -177,8 +183,8 @@ function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, re
       }
       break;
     }
-    case "escape":
-      // Return bets to balance before leaving
+    case "q":
+    case "escape": {
       const betTotal = totalBets(state);
       if (betTotal > 0) {
         clearBets(state);
@@ -186,46 +192,161 @@ function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, re
       state.screen = "menu";
       state.message = "";
       break;
+    }
   }
 }
 
-function navigateBoard(rs: RouletteState, dRow: number, dCol: number): void {
-  let newRow = rs.cursorRow + dRow;
-  let newCol = rs.cursorCol + dCol;
+// --- Navigation ---
+// Zones layout:
+//   zero          (top, above grid)
+//   grid + dozen  (grid is main area, dozen is to the right)
+//   column        (below grid, the 2:1 row)
+//   outside       (below column, 6 outside bets)
 
-  // Clamp rows
-  newRow = Math.max(0, Math.min(BOARD_ROWS - 1, newRow));
-
-  // Handle column clamping based on row
-  if (newRow === 0) {
-    // Zero row - single cell, col doesn't matter
-    newCol = 0;
-  } else if (newRow >= 1 && newRow <= 3) {
-    // Number grid: 12 columns
-    newCol = Math.max(0, Math.min(11, newCol));
-  } else if (newRow === 4) {
-    // Dozens: 3 groups of 4 cols
-    newCol = Math.max(0, Math.min(11, newCol));
-  } else if (newRow === 5) {
-    // Outside bets: 6 groups of 2 cols
-    newCol = Math.max(0, Math.min(11, newCol));
-  } else if (newRow === 6) {
-    // Column bets: 3 groups of 4 cols
-    newCol = Math.max(0, Math.min(11, newCol));
+function navigateUp(rs: RouletteState): void {
+  switch (rs.cursorZone) {
+    case "zero":
+      break; // already at top
+    case "grid":
+      if (rs.cursorVR > 0) {
+        rs.cursorVR--;
+      } else if (rs.cursorVR === 0) {
+        // Go to zero-split border (vr=-1), snap to even vc
+        rs.cursorVR = -1;
+        rs.cursorVC = rs.cursorVC % 2 === 0 ? rs.cursorVC : Math.max(0, rs.cursorVC - 1);
+      } else {
+        // vr=-1 → zero zone
+        rs.cursorZone = "zero";
+        rs.cursorVC = 0;
+      }
+      break;
+    case "dozen":
+      if (rs.cursorVC > 0) {
+        rs.cursorVC--;
+      }
+      break;
+    case "column":
+      rs.cursorZone = "grid";
+      rs.cursorVR = VGRID_ROWS - 1;
+      rs.cursorVC = Math.min(VGRID_COLS - 1, rs.cursorVC * 2);
+      break;
+    case "outside":
+      if (rs.cursorVR > 0) {
+        rs.cursorVR = 0;
+        rs.cursorVC = Math.min(2, rs.cursorVC);
+      } else {
+        rs.cursorZone = "column";
+        rs.cursorVC = Math.min(2, rs.cursorVC);
+      }
+      break;
   }
+}
 
-  // When moving from zero row to number grid, map to center
-  if (rs.cursorRow === 0 && newRow >= 1) {
-    newCol = rs.cursorCol || 0;
-    newCol = Math.max(0, Math.min(11, newCol));
+function navigateDown(rs: RouletteState): void {
+  switch (rs.cursorZone) {
+    case "zero":
+      // Down from zero → zero-split border
+      rs.cursorZone = "grid";
+      rs.cursorVR = -1;
+      rs.cursorVC = 2; // center split
+      break;
+    case "grid":
+      if (rs.cursorVR < VGRID_ROWS - 1) {
+        rs.cursorVR++;
+      } else {
+        rs.cursorZone = "column";
+        // Map grid vc to column position (0-2)
+        const vc = rs.cursorVC < 0 ? 0 : rs.cursorVC >= VGRID_COLS ? 2 : Math.floor(rs.cursorVC / 2);
+        rs.cursorVC = vc;
+      }
+      break;
+    case "dozen":
+      if (rs.cursorVC < 2) {
+        rs.cursorVC++;
+      }
+      break;
+    case "column":
+      rs.cursorZone = "outside";
+      rs.cursorVR = 0;
+      rs.cursorVC = Math.min(2, rs.cursorVC);
+      break;
+    case "outside":
+      if (rs.cursorVR === 0) {
+        rs.cursorVR = 1;
+        rs.cursorVC = Math.min(2, rs.cursorVC);
+      }
+      break; // row 1 is bottom
   }
+}
 
-  // When moving to zero row
-  if (newRow === 0 && rs.cursorRow !== 0) {
-    // Keep the col for when we move back
-    newCol = rs.cursorCol;
+function navigateLeft(rs: RouletteState): void {
+  switch (rs.cursorZone) {
+    case "zero":
+      break;
+    case "grid":
+      if (rs.cursorVR === -1) {
+        // Zero-split border: only even positions (0, 2, 4)
+        if (rs.cursorVC >= 2) rs.cursorVC -= 2;
+      } else if (rs.cursorVC > -1) {
+        rs.cursorVC--;
+      }
+      break;
+    case "dozen": {
+      // Left from dozen → back to grid at rightmost cell
+      const dozenIdx = rs.cursorVC;
+      rs.cursorZone = "grid";
+      rs.cursorVR = dozenToGridVR(dozenIdx);
+      rs.cursorVC = VGRID_COLS - 1;
+      break;
+    }
+    case "column":
+      if (rs.cursorVC > 0) rs.cursorVC--;
+      break;
+    case "outside":
+      if (rs.cursorVC > 0) rs.cursorVC--;
+      break;
   }
+}
 
-  rs.cursorRow = newRow;
-  rs.cursorCol = newCol;
+function navigateRight(rs: RouletteState): void {
+  switch (rs.cursorZone) {
+    case "zero":
+      break;
+    case "grid":
+      if (rs.cursorVR === -1) {
+        // Zero-split border: only even positions (0, 2, 4)
+        if (rs.cursorVC <= 2) rs.cursorVC += 2;
+      } else if (rs.cursorVC < VGRID_COLS - 1) {
+        rs.cursorVC++;
+      } else {
+        // Right from rightmost grid column → dozen zone
+        rs.cursorZone = "dozen";
+        rs.cursorVC = gridVRToDOzen(rs.cursorVR);
+      }
+      break;
+    case "dozen":
+      break; // rightmost zone
+    case "column":
+      if (rs.cursorVC < 2) rs.cursorVC++;
+      break;
+    case "outside":
+      if (rs.cursorVC < 2) rs.cursorVC++;
+      break;
+  }
+}
+
+// Map grid virtual row to dozen index (0-2)
+function gridVRToDOzen(vr: number): number {
+  const tableRow = Math.floor(vr / 2) + 1; // 1-12
+  if (tableRow <= 4) return 0;
+  if (tableRow <= 8) return 1;
+  return 2;
+}
+
+// Map dozen index to grid virtual row (center of that dozen's rows)
+function dozenToGridVR(dozenIdx: number): number {
+  // Dozen 0 covers table rows 1-4 → vr 0-6, center at vr 3
+  // Dozen 1 covers table rows 5-8 → vr 8-14, center at vr 11
+  // Dozen 2 covers table rows 9-12 → vr 16-22, center at vr 19
+  return dozenIdx * 8 + 3;
 }

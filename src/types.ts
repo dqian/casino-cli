@@ -19,6 +19,10 @@ export type RoulettePhase = "betting" | "spinning" | "result";
 
 export type BetType =
   | { kind: "straight"; number: number }
+  | { kind: "split"; numbers: [number, number] }
+  | { kind: "street"; row: number }
+  | { kind: "corner"; numbers: [number, number, number, number] }
+  | { kind: "sixline"; rows: [number, number] }
   | { kind: "red" }
   | { kind: "black" }
   | { kind: "odd" }
@@ -33,16 +37,20 @@ export interface Bet {
   amount: number;
 }
 
+export type CursorZone = "zero" | "grid" | "column" | "dozen" | "outside";
+
 export interface RouletteState {
   phase: RoulettePhase;
   bets: Bet[];
   betAmount: number;          // current chip size
-  cursorRow: number;          // board cursor row
-  cursorCol: number;          // board cursor col
+  cursorZone: CursorZone;
+  cursorVR: number;           // virtual row within zone
+  cursorVC: number;           // virtual col within zone
   result: number | null;      // last spin result
   spinFrame: number;          // animation frame counter
   spinTarget: number;         // final landing number
   spinHighlight: number;      // currently highlighted number during animation
   winAmount: number;          // amount won on last spin
+  spinHistory: number[];       // last N spin results
   showResultTimer: ReturnType<typeof setTimeout> | null;
 }

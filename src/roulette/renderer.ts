@@ -1,11 +1,83 @@
-import type { AppState } from "../types";
+import type { AppState, BetType } from "../types";
 import * as t from "../theme";
-import { numberColor, cellAt, sameBet, WHEEL_ORDER, numberAt } from "./board";
+import {
+  numberColor, numberAt, sameBetType, WHEEL_ORDER, betLabel,
+  virtualToGridPos, gridPosToBet, payout,
+  NUM_TABLE_ROWS, NUM_TABLE_COLS, VGRID_COLS,
+} from "./board";
 import { totalBets } from "./game";
 
-// Cell dimensions
-const CELL_W = 5;
-const CELL_H = 3;
+const CELL_W = 8;
+const DOZEN_W = 9;
+const GUTTER_W = 4; // left gutter for street/sixline
+
+const DOT = "·";
+const CROSS = "+";
+const CHIP = "●";
+
+function chipColor(amount: number): string {
+  if (amount >= 500) return t.magenta;
+  if (amount >= 100) return t.yellow;
+  if (amount >= 50)  return t.cyan;
+  if (amount >= 25)  return t.green;
+  if (amount >= 10)  return t.blue;
+  if (amount >= 5)   return t.red;
+  return t.white;
+}
+
+function dotFill(n: number, color: string = t.gray): string {
+  if (n <= 0) return "";
+  return `${color}${DOT.repeat(n)}${t.reset}`;
+}
+
+function dotFillWithChip(n: number, dotColor: string, chipColorStr: string): string {
+  if (n <= 0) return "";
+  const mid = Math.floor(n / 2);
+  return `${dotColor}${DOT.repeat(mid)}${t.reset}${chipColorStr}${CHIP}${t.reset}${dotColor}${DOT.repeat(n - mid - 1)}${t.reset}`;
+}
+
+
+const HIST_W = 6; // " XX " + 2 spaces
+
+// --- Hotkey grid (rendered at terminal bottom) ---
+const HOTKEYS: { key: string; label: string }[] = [
+  { key: "←↑↓→", label: "Move" },
+  { key: "Space", label: "Place bet" },
+  { key: "c", label: "Clear all" },
+  { key: "Enter", label: "Spin" },
+  { key: "+/-", label: "Chip size" },
+  { key: "x", label: "Remove bet" },
+  { key: "q", label: "Menu" },
+];
+
+const HOTKEYS_RESULT: { key: string; label: string }[] = [
+  { key: "Enter", label: "New round" },
+  { key: "q", label: "Menu" },
+];
+
+export function renderHotkeyGrid(width: number, phase: string): string[] {
+  const keys = phase === "result" ? HOTKEYS_RESULT : phase === "spinning" ? [] : HOTKEYS;
+  if (keys.length === 0) return [""];
+
+  const maxKey = Math.max(...keys.map(h => h.key.length));
+  const maxLabel = Math.max(...keys.map(h => h.label.length));
+  const cellW = maxKey + 2 + maxLabel + 2;
+  const cols = Math.max(1, Math.floor((width - 4) / cellW));
+  const rows = Math.ceil(keys.length / cols);
+
+  const lines: string[] = [];
+  for (let r = 0; r < rows; r++) {
+    let line = "  ";
+    for (let c = 0; c < cols; c++) {
+      const idx = r * cols + c;
+      if (idx >= keys.length) break;
+      const h = keys[idx]!;
+      line += `${t.white}${t.bold}${h.key.padStart(maxKey)}${t.reset}  ${t.gray}${h.label.padEnd(maxLabel)}${t.reset}  `;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
 
 export function renderRouletteScreen(state: AppState): string[] {
   const { columns: width } = process.stdout;
@@ -14,296 +86,599 @@ export function renderRouletteScreen(state: AppState): string[] {
 
   // Header
   const balanceStr = `$${state.balance.toLocaleString()}`;
-  const betsStr = totalBets(state) > 0 ? `  Bets: $${totalBets(state).toLocaleString()}` : "";
   const chipStr = `Chip: $${rs.betAmount}`;
-  const header = `  ${t.bold}${t.yellow}ROULETTE${t.reset}  ${t.green}${balanceStr}${t.reset}${t.gray}${betsStr}${t.reset}`;
+  const header = `  ${t.bold}${t.yellow}ROULETTE${t.reset}  ${t.green}${balanceStr}${t.reset}`;
   const headerRight = `${t.gray}${chipStr}${t.reset}  `;
   const headerPad = Math.max(0, width - t.stripAnsi(header).length - t.stripAnsi(headerRight).length);
   lines.push(header + " ".repeat(headerPad) + headerRight);
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
 
-  // Wheel display during spinning
-  if (rs.phase === "spinning" || rs.phase === "result") {
+  // Wheel / status area (above the board) — always exactly 5 lines
+  lines.push("");
+  if (rs.phase === "spinning") {
+    lines.push(...renderWheel(rs.spinHighlight, width));
+    lines.push(centerAnsi(`${t.yellow}Spinning...${t.reset}`, width));
     lines.push("");
-    lines.push(renderWheel(rs.spinHighlight, width));
-    lines.push("");
-  } else {
-    lines.push("");
-    if (rs.result !== null) {
-      lines.push(renderWheel(rs.result, width));
+  } else if (rs.phase === "result") {
+    lines.push(...renderWheel(rs.spinHighlight, width));
+    if (rs.winAmount > 0) {
+      lines.push(centerAnsi(`${t.green}${t.bold}WIN $${rs.winAmount.toLocaleString()}!${t.reset}`, width));
     } else {
-      lines.push(centerText("Place your bets!", width));
+      lines.push(centerAnsi(`${t.red}No win${t.reset}`, width));
     }
     lines.push("");
+  } else {
+    // Betting phase
+    if (rs.result !== null) {
+      lines.push(...renderWheel(rs.result, width));
+    } else {
+      lines.push(""); // pointer placeholder
+      lines.push(centerAnsi("Place your bets!", width));
+    }
+    const total = totalBets(state);
+    lines.push(total > 0 ? centerAnsi(`${t.gray}Table: $${total.toLocaleString()}${t.reset}`, width) : "");
+    lines.push(state.message ? centerAnsi(`${t.yellow}${state.message}${t.reset}`, width) : "");
   }
 
-  // Roulette board
-  const boardLines = renderBoard(state, width);
-  lines.push(...boardLines);
+  // Current bet info line — left-aligned to board, bet amount right-aligned
+  if (rs.phase === "betting") {
+    const cursorBet = getCursorBet(rs);
+    if (cursorBet) {
+      const label = betLabel(cursorBet);
+      const payoutVal = payout(cursorBet);
+      const existing = rs.bets.find(b => sameBetType(b.type, cursorBet));
 
-  // Separator
-  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+      const gridInner = CELL_W * NUM_TABLE_COLS + (NUM_TABLE_COLS - 1);
+      const numRowW = GUTTER_W + 1 + gridInner + 1 + DOZEN_W + 1;
+      const boardLeft = Math.max(HIST_W + 2, Math.floor((width - numRowW) / 2) + 2);
+      const boardPad = " ".repeat(boardLeft + GUTTER_W);
 
-  // Result message or betting info
-  if (rs.phase === "result") {
-    const num = rs.result!;
-    const color = numberColor(num);
-    const colorCode = color === "red" ? t.red : color === "green" ? t.green : t.white;
-    const resultText = `Ball landed on ${colorCode}${t.bold}${num}${t.reset} (${color})`;
-
-    if (rs.winAmount > 0) {
-      const netWin = rs.winAmount - totalBets(state);
-      lines.push(`  ${resultText}  ${t.green}${t.bold}WIN $${rs.winAmount.toLocaleString()}!${t.reset}`);
-    } else {
-      lines.push(`  ${resultText}  ${t.red}No win${t.reset}`);
-    }
-    lines.push(`  ${t.gray}Enter:new round  Esc:back to menu${t.reset}`);
-  } else if (rs.phase === "spinning") {
-    lines.push(`  ${t.yellow}Spinning...${t.reset}`);
-    lines.push("");
-  } else {
-    if (state.message) {
-      lines.push(`  ${t.yellow}${state.message}${t.reset}`);
+      // Right edge aligns with top-right corner of zero box
+      const zeroBoxW = 1 + gridInner + 1; // crosses + inner
+      const leftText = `${t.white}${t.bold}${label}${t.reset} ${t.gray}(${payoutVal}:1)${t.reset}`;
+      if (existing) {
+        const rightText = `${t.gray}Bet: $${existing.amount}${t.reset}`;
+        const leftVis = t.stripAnsi(leftText).length;
+        const rightVis = t.stripAnsi(rightText).length;
+        const gap = Math.max(1, zeroBoxW - leftVis - rightVis);
+        lines.push(boardPad + leftText + spc(gap) + rightText);
+      } else {
+        lines.push(boardPad + leftText);
+      }
     } else {
       lines.push("");
     }
-    const hints = [
-      `${t.white}Arrows${t.reset}${t.gray}:move${t.reset}`,
-      `${t.white}Space${t.reset}${t.gray}:bet${t.reset}`,
-      `${t.white}+/-${t.reset}${t.gray}:chip${t.reset}`,
-      `${t.white}Enter${t.reset}${t.gray}:spin${t.reset}`,
-      `${t.white}c${t.reset}${t.gray}:clear${t.reset}`,
-      `${t.white}Esc${t.reset}${t.gray}:menu${t.reset}`,
-    ];
-    lines.push(`  ${hints.join("  ")}`);
+  } else {
+    lines.push("");
   }
+
+  // Board
+  const boardLines = renderBoard(state, width);
+  lines.push(...boardLines);
 
   return lines;
 }
 
-function renderWheel(highlight: number, width: number): string {
-  // Show a segment of the wheel centered on the highlighted number
+function getCursorBet(rs: AppState["roulette"]): BetType | null {
+  switch (rs.cursorZone) {
+    case "zero": return { kind: "straight", number: 0 };
+    case "grid": return gridPosToBet(virtualToGridPos(rs.cursorVR, rs.cursorVC));
+    case "column": {
+      const which = (rs.cursorVC + 1) as 1 | 2 | 3;
+      return { kind: "column", which };
+    }
+    case "dozen": {
+      const which = (rs.cursorVC + 1) as 1 | 2 | 3;
+      return { kind: "dozen", which };
+    }
+    case "outside": {
+      if (rs.cursorVR === 0) {
+        const types: BetType[] = [{ kind: "red" }, { kind: "black" }, { kind: "low" }];
+        return types[rs.cursorVC] ?? null;
+      }
+      const types: BetType[] = [{ kind: "even" }, { kind: "odd" }, { kind: "high" }];
+      return types[rs.cursorVC] ?? null;
+    }
+  }
+  return null;
+}
+
+// Background color shades by distance from center
+function wheelBg(color: "red" | "green" | "black", dist: number): string {
+  if (color === "red") {
+    // Bright red center → dark red edges
+    if (dist === 0) return t.bg256(196);  // bright red
+    if (dist === 1) return t.bg256(160);  // red
+    if (dist === 2) return t.bg256(124);  // dark red
+    if (dist === 3) return t.bg256(88);   // darker red
+    return t.bg256(52);                    // darkest red
+  }
+  if (color === "green") {
+    if (dist === 0) return t.bg256(34);
+    if (dist === 1) return t.bg256(28);
+    if (dist === 2) return t.bg256(22);
+    return t.bg256(22);
+  }
+  // black numbers → gray shades
+  if (dist === 0) return t.bg256(236);
+  if (dist === 1) return t.bg256(235);
+  if (dist === 2) return t.bg256(234);
+  if (dist === 3) return t.bg256(233);
+  return t.bg256(232);
+}
+
+function renderWheel(highlight: number, width: number): string[] {
   const idx = WHEEL_ORDER.indexOf(highlight);
-  const windowSize = 9; // show 9 numbers
+  const windowSize = 9;
   const half = Math.floor(windowSize / 2);
+
+  // Pointer line (triangle above center)
+  const pointerPad = half * 4 + 1; // each slot is 4 chars wide, center at half
+  const pointerLine = centerAnsi(spc(pointerPad) + `${t.gray}▼${t.reset}` + spc(pointerPad), width);
 
   let parts: string[] = [];
   for (let i = -half; i <= half; i++) {
     const wheelIdx = (idx + i + WHEEL_ORDER.length) % WHEEL_ORDER.length;
     const num = WHEEL_ORDER[wheelIdx] ?? 0;
     const color = numberColor(num);
-    const isCenter = i === 0;
-
+    const dist = Math.abs(i);
     let numStr = String(num).padStart(2, " ");
-
-    if (isCenter) {
-      // Highlighted center number with background
-      const bgColor = color === "red" ? t.bgRed : color === "green" ? t.bgGreen : t.bgBlack;
-      parts.push(`${bgColor}${t.white}${t.bold}[${numStr}]${t.reset}`);
-    } else {
-      const fgColor = color === "red" ? t.red : color === "green" ? t.green : t.gray;
-      const dimness = Math.abs(i) > 2 ? t.dim : "";
-      parts.push(`${dimness}${fgColor} ${numStr} ${t.reset}`);
-    }
+    const bg = wheelBg(color, dist);
+    parts.push(`${bg}${t.white}${t.bold} ${numStr} ${t.reset}`);
   }
-
-  const wheelStr = parts.join("");
-  // Center pointer
-  const pointer = `${t.yellow}${t.bold}  ${"  ".repeat(half)}  v${t.reset}`;
-  const wheelLine = centerAnsiText(wheelStr, width);
-  return wheelLine;
+  return [pointerLine, centerAnsi(parts.join(""), width)];
 }
 
-function centerText(text: string, width: number): string {
-  const pad = Math.max(0, Math.floor((width - text.length) / 2));
-  return " ".repeat(pad) + text;
-}
-
-function centerAnsiText(text: string, width: number): string {
+function centerAnsi(text: string, width: number): string {
   const visLen = t.stripAnsi(text).length;
   const pad = Math.max(0, Math.floor((width - visLen) / 2));
   return " ".repeat(pad) + text;
 }
 
+function renderHistEntry(num: number): string {
+  const color = numberColor(num);
+  const bg = wheelBg(color, 1);
+  return `${bg}${t.white}${t.bold} ${String(num).padStart(2)} ${t.reset}`;
+}
+
+// --- Board rendering ---
+
 function renderBoard(state: AppState, width: number): string[] {
   const rs = state.roulette;
-  const lines: string[] = [];
+  const rawLines: string[] = [];
 
-  // Calculate left padding to center the board
-  const boardWidth = 1 + CELL_W * 12 + 1; // border + 12 cells + border
-  // Add extra for the 0 cell on the left
-  const totalBoardWidth = CELL_W + 1 + CELL_W * 12 + 1;
-  const leftPad = Math.max(2, Math.floor((width - totalBoardWidth) / 2));
-  const pad = " ".repeat(leftPad);
+  const gridInner = CELL_W * NUM_TABLE_COLS + (NUM_TABLE_COLS - 1); // 26
+  // Dozen column starts at row 1, not zero. Zero row only spans number grid.
+  // Board width for number rows: gutter + grid + dozen
+  const numRowW = GUTTER_W + 1 + gridInner + 1 + DOZEN_W + 1;
+  // Zero row width: gutter + grid only
+  const zeroRowW = GUTTER_W + 1 + gridInner + 1;
 
-  // Zero cell + number grid (rows 1-3)
-  const zeroH = CELL_H * 3 + 2; // spans all 3 number rows
+  const hasHist = rs.spinHistory.length > 0;
+  // Center the board itself; history column sits to the left (+2 for visual offset)
+  const boardLeft = Math.max(HIST_W + 2, Math.floor((width - numRowW) / 2) + 2);
+  const leftPad = boardLeft - HIST_W; // margin before history column
+  const pad = " ".repeat(boardLeft); // includes room for history
 
-  // Build the board line by line
-  // Top border
-  const zeroCursor = rs.cursorRow === 0;
-  const zeroBorder = zeroCursor && rs.phase === "betting" ? t.yellow : t.gray;
+  const d = `${t.gray}${DOT}${t.reset}`;
+  const x = `${t.gray}${CROSS}${t.reset}`;
+  const yd = `${t.yellow}${t.bold}${DOT}${t.reset}`;
+  const yx = `${t.yellow}${t.bold}${CROSS}${t.reset}`;
 
-  // Row by row rendering of the number grid with zero on the left
-  for (let row = 1; row <= 3; row++) {
-    // Top border of this row
-    let topLine = pad;
-    if (row === 1) {
-      topLine += `${zeroBorder}┌${"─".repeat(CELL_W - 1)}┐${t.reset}`;
-    } else {
-      topLine += `${zeroBorder}│${" ".repeat(CELL_W - 1)}│${t.reset}`;
+  // No box highlighting for straight number bets — only split/corner/line bets highlight borders
+
+  // --- Left gutter helpers ---
+  function renderGutter(vr: number): string {
+    const edgeVC = -1;
+    const isCursor = rs.cursorZone === "grid" && rs.cursorVR === vr && rs.cursorVC === edgeVC && rs.phase === "betting";
+    const pos = virtualToGridPos(vr, edgeVC);
+    const bet = findBet(rs, gridPosToBet(pos));
+    const isStreet = vr % 2 === 0;
+    const marker = isStreet ? "St" : "6L";
+
+    if (isCursor && bet) {
+      const cc = chipColor(bet);
+      return `${cc}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
     }
-    for (let col = 0; col < 12; col++) {
-      const isCursor = rs.cursorRow === row && rs.cursorCol === col && rs.phase === "betting";
-      const border = isCursor ? t.yellow : t.gray;
-      if (row === 1) {
-        topLine += col === 0 ? `${border}┌${"─".repeat(CELL_W - 1)}${t.reset}` : `${border}┬${"─".repeat(CELL_W - 1)}${t.reset}`;
+    if (isCursor) {
+      return `${t.yellow}${t.bold}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
+    }
+    if (bet) {
+      const cc = chipColor(bet);
+      return `${cc}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
+    }
+    return spc(GUTTER_W);
+  }
+
+  // --- Zero row (no dozen column) ---
+  const zeroSel = rs.cursorZone === "zero" && rs.phase === "betting";
+  const zeroBet = findBet(rs, { kind: "straight", number: 0 });
+  // Top border (zero only — no dozen, crosses at corners)
+  rawLines.push(pad + spc(GUTTER_W) + x + dotFill(gridInner) + x);
+  // Zero content
+  const zeroSpinHL = (rs.phase === "spinning" || rs.phase === "result") && rs.spinHighlight === 0;
+  rawLines.push(pad + spc(GUTTER_W) + renderZeroCell(gridInner, zeroSel, zeroBet, zeroSpinHL) + d);
+
+  // Zero-to-grid border + dozen column top
+  {
+    let zb = pad + spc(GUTTER_W);
+    for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
+      const vc = tc * 2;
+      const splitCursor = rs.cursorZone === "grid" && rs.cursorVR === -1 && rs.cursorVC === vc && rs.phase === "betting";
+      const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(-1, vc)));
+      const highlight = false;
+
+      const junc = CROSS;
+      // Junction: highlight only for adjBelow (number cell selected), not for split cursor
+      const juncHL = false;
+      zb += `${juncHL ? `${t.yellow}${t.bold}` : t.gray}${junc}${t.reset}`;
+
+      if (splitCursor) {
+        const cc = splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`;
+        zb += dotFillWithChip(CELL_W, `${t.yellow}${t.bold}`, cc);
+      } else if (splitBet) {
+        zb += dotFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
       } else {
-        topLine += col === 0 ? `${border}├${"─".repeat(CELL_W - 1)}${t.reset}` : `${border}┼${"─".repeat(CELL_W - 1)}${t.reset}`;
+        zb += dotFill(CELL_W, highlight ? `${t.yellow}${t.bold}` : t.gray);
       }
     }
-    topLine += row === 1 ? `${t.gray}┐${t.reset}` : `${t.gray}┤${t.reset}`;
-    lines.push(topLine);
+    // Last cross: highlight if zero selected OR rightmost cell selected
+    const lastHL = false;
+    zb += `${lastHL ? `${t.yellow}${t.bold}` : t.gray}${CROSS}${t.reset}` + dotFill(DOZEN_W) + x;
+    rawLines.push(zb);
+  }
+
+  // --- Number rows ---
+  for (let tr = 1; tr <= NUM_TABLE_ROWS; tr++) {
+    const vr = (tr - 1) * 2;
+    const dozenIdx = Math.floor((tr - 1) / 4);
+    const rowInDozen = (tr - 1) % 4;
 
     // Content line
-    let contentLine = pad;
-    // Zero cell content (only in middle row)
-    if (row === 2) {
-      const zeroCell = cellAt(0, 0)!;
-      const betOnZero = rs.bets.find(b => sameBet(zeroCell, b.type));
-      const zeroContent = betOnZero ? `${t.bgGreen}${t.white}${t.bold} 0 ${t.reset}` : `${t.green}${t.bold} 0 ${t.reset}`;
-      contentLine += `${zeroBorder}│${t.reset}${zeroContent}${zeroBorder}│${t.reset}`;
-    } else {
-      contentLine += `${zeroBorder}│${" ".repeat(CELL_W - 1)}│${t.reset}`;
-    }
+    let cl = pad + renderGutter(vr) + d;
 
-    for (let col = 0; col < 12; col++) {
-      const cell = cellAt(row, col)!;
-      const num = numberAt(row, col);
+    for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
+      const vc = tc * 2;
+      const num = numberAt(tr, tc);
       const color = numberColor(num);
-      const isCursor = rs.cursorRow === row && rs.cursorCol === col && rs.phase === "betting";
-      const isSpinHighlight = (rs.phase === "spinning" || rs.phase === "result") && num === rs.spinHighlight;
-      const betOnThis = rs.bets.find(b => sameBet(cell, b.type));
-      const border = isCursor ? t.yellow : t.gray;
+      const isGridCursor = rs.cursorZone === "grid" && rs.cursorVR === vr && rs.cursorVC === vc && rs.phase === "betting";
+      const isSpinHL = (rs.phase === "spinning" || rs.phase === "result") && num === rs.spinHighlight;
+      const bet = findBet(rs, { kind: "straight", number: num });
 
-      let numStr = String(num).padStart(2, " ");
-      let cellContent: string;
+      cl += renderNumberCell(num, CELL_W, color, isGridCursor, isSpinHL, bet);
 
-      if (isSpinHighlight) {
-        cellContent = `${t.bold}${t.inverse} ${numStr} ${t.reset}`;
-      } else if (betOnThis) {
-        const bgColor = color === "red" ? t.bgRed : t.bgWhite;
-        const fgColor = color === "red" ? t.white : t.bgBlack;
-        cellContent = `${bgColor}${t.bold} ${numStr} ${t.reset}`;
+      if (tc < NUM_TABLE_COLS - 1) {
+        const sepVC = vc + 1;
+        const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(vr, sepVC)));
+        const vSplitCursor = rs.cursorZone === "grid" && rs.cursorVR === vr && rs.cursorVC === sepVC && rs.phase === "betting";
+        if (vSplitCursor) {
+          cl += `${splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`}${CHIP}${t.reset}`;
+        } else if (splitBet) {
+          cl += `${chipColor(splitBet)}${t.bold}${CHIP}${t.reset}`;
+        } else {
+          cl += d;
+        }
+      }
+    }
+    cl += d;
+    // Dozen: sequential line index within group (content rows = 0,2,4,6; border rows = 1,3,5)
+    const dozenLine = rowInDozen * 2;
+    cl += renderDozenContent(rs, dozenIdx, dozenLine, DOZEN_W);
+    cl += d;
+    rawLines.push(cl);
+
+    // Border row
+    if (tr < NUM_TABLE_ROWS) {
+      const vrBorder = vr + 1;
+      const isDozenBoundary = tr % 4 === 0;
+
+      let bl = pad + renderGutter(vrBorder) + x;
+
+      for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
+        const vc = tc * 2;
+        const hSplitCursor = rs.cursorZone === "grid" && rs.cursorVR === vrBorder && rs.cursorVC === vc && rs.phase === "betting";
+        const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(vrBorder, vc)));
+        if (hSplitCursor) {
+          const cc = splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`;
+          bl += dotFillWithChip(CELL_W, `${t.yellow}${t.bold}`, cc);
+        } else if (splitBet) {
+          bl += dotFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
+        } else {
+          bl += dotFill(CELL_W);
+        }
+
+        if (tc < NUM_TABLE_COLS - 1) {
+          const cornerVC = vc + 1;
+          const cornerCursor = rs.cursorZone === "grid" && rs.cursorVR === vrBorder && rs.cursorVC === cornerVC && rs.phase === "betting";
+          const cornerBet = findBet(rs, gridPosToBet(virtualToGridPos(vrBorder, cornerVC)));
+
+          if (cornerCursor) {
+            bl += `${cornerBet ? chipColor(cornerBet) : `${t.yellow}${t.bold}`}${CHIP}${t.reset}`;
+          } else if (cornerBet) {
+            bl += `${chipColor(cornerBet)}${t.bold}${CHIP}${t.reset}`;
+          } else {
+            bl += x;
+          }
+        }
+      }
+
+      bl += x;
+      if (isDozenBoundary) {
+        bl += dotFill(DOZEN_W) + x;
       } else {
-        const fgColor = color === "red" ? t.red : t.white;
-        cellContent = `${fgColor} ${numStr} ${t.reset}`;
+        const dozenBorderLine = rowInDozen * 2 + 1;
+        bl += renderDozenContent(rs, dozenIdx, dozenBorderLine, DOZEN_W) + d;
       }
+      rawLines.push(bl);
+    }
+  }
 
-      if (isCursor) {
-        cellContent = `${t.bold}${t.yellow}[${numStr}]${t.reset}`;
+  // Bottom border of number grid + dozen (cursor-aware for last row highlight)
+  {
+    const lastVR = (NUM_TABLE_ROWS - 1) * 2; // vr=22
+    // Check if cursor is on the last row of numbers
+    const isOnLastRow = (tc: number) => {
+      return rs.cursorZone === "column" && rs.cursorVC === tc && rs.phase === "betting";
+    };
+    let bb = pad + spc(GUTTER_W);
+    for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
+      const hl = isOnLastRow(tc);
+      const prevHL = tc > 0 && isOnLastRow(tc - 1);
+      bb += (hl || prevHL) ? yx : x;
+      bb += dotFill(CELL_W, hl ? `${t.yellow}${t.bold}` : t.gray);
+    }
+    const lastHL = isOnLastRow(NUM_TABLE_COLS - 1);
+    bb += (lastHL ? yx : x) + dotFill(DOZEN_W) + x;
+    rawLines.push(bb);
+  }
+
+  // Column bets (2:1)
+  {
+    const colCursor = (c: number) => rs.cursorZone === "column" && rs.cursorVC === c && rs.phase === "betting";
+    let cl = pad + spc(GUTTER_W) + (colCursor(0) ? yd : d);
+    for (let c = 0; c < NUM_TABLE_COLS; c++) {
+      const colWhich = (c + 1) as 1 | 2 | 3;
+      const isCur = colCursor(c);
+      const bet = findBet(rs, { kind: "column", which: colWhich });
+      cl += renderLabelCell("2:1", CELL_W, isCur, bet);
+      if (c < NUM_TABLE_COLS - 1) {
+        cl += (colCursor(c) || colCursor(c + 1)) ? yd : d;
       }
-
-      contentLine += `${border}│${t.reset}${cellContent}`;
     }
-    contentLine += `${t.gray}│${t.reset}`;
-    lines.push(contentLine);
+    cl += (colCursor(2) ? yd : d);
+    rawLines.push(cl);
   }
 
-  // Bottom border of number grid
-  let botBorder = pad;
-  botBorder += `${zeroBorder}└${"─".repeat(CELL_W - 1)}┘${t.reset}`;
-  for (let col = 0; col < 12; col++) {
-    botBorder += col === 0 ? `${t.gray}├${"─".repeat(CELL_W - 1)}${t.reset}` : `${t.gray}┼${"─".repeat(CELL_W - 1)}${t.reset}`;
+  // Helper for 3-col outside border lines with cursor highlight
+  function outsideBorder3(curRow: number): string {
+    const above = curRow - 1;
+    const below = curRow;
+    const curAbove = (c: number) => rs.cursorZone === "outside" && rs.cursorVR === above && rs.cursorVC === c && rs.phase === "betting";
+    const curBelow = (c: number) => rs.cursorZone === "outside" && rs.cursorVR === below && rs.cursorVC === c && rs.phase === "betting";
+    const colCur = (c: number) => rs.cursorZone === "column" && rs.cursorVC === c && rs.phase === "betting";
+    const hl = (c: number) => (above >= 0 && curAbove(c)) || (below <= 1 && curBelow(c)) || (above < 0 && colCur(c));
+    let line = pad + spc(GUTTER_W);
+    for (let c = 0; c < 3; c++) {
+      const prevHL = c > 0 && hl(c - 1);
+      line += (hl(c) || prevHL) ? yx : x;
+      line += dotFill(CELL_W, hl(c) ? `${t.yellow}${t.bold}` : t.gray);
+    }
+    line += hl(2) ? yx : x;
+    return line;
   }
-  botBorder += `${t.gray}┤${t.reset}`;
-  lines.push(botBorder);
 
-  // Row 4: Dozens
-  let dozenLine = pad + " ".repeat(CELL_W);
-  const dozenLabels = ["1st 12", "2nd 12", "3rd 12"];
-  for (let d = 0; d < 3; d++) {
-    const dozenWidth = CELL_W * 4;
-    const isCursor = rs.cursorRow === 4 && Math.floor(rs.cursorCol / 4) === d && rs.phase === "betting";
-    const cell = cellAt(4, d * 4)!;
-    const betOnThis = rs.bets.find(b => sameBet(cell, b.type));
-    const border = isCursor ? t.yellow : t.gray;
-    const dlabel = dozenLabels[d] ?? "";
-    const label = dlabel.padStart(Math.floor((dozenWidth - 1 + dlabel.length) / 2)).padEnd(dozenWidth - 1);
+  // Border above outside row 0
+  rawLines.push(outsideBorder3(0));
 
-    if (isCursor) {
-      dozenLine += `${border}│${t.yellow}${t.bold}${label}${t.reset}`;
-    } else if (betOnThis) {
-      dozenLine += `${border}│${t.cyan}${t.bold}${label}${t.reset}`;
+  // Outside bets row 0: RED, BLK, 1-18
+  {
+    const row: { label: string; bet: BetType; color?: string }[] = [
+      { label: "RED", bet: { kind: "red" }, color: t.red },
+      { label: "BLK", bet: { kind: "black" } },
+      { label: "1-18", bet: { kind: "low" } },
+    ];
+    const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 0 && rs.cursorVC === i && rs.phase === "betting";
+    let ol = pad + spc(GUTTER_W) + (isCur(0) ? yd : d);
+    for (let i = 0; i < 3; i++) {
+      const ob = row[i]!;
+      const bet = findBet(rs, ob.bet);
+      ol += renderLabelCell(ob.label, CELL_W, isCur(i), bet, ob.color);
+      if (i < 2) ol += (isCur(i) || isCur(i + 1)) ? yd : d;
+    }
+    ol += isCur(2) ? yd : d;
+    rawLines.push(ol);
+  }
+
+  // Border between outside rows
+  rawLines.push(outsideBorder3(1));
+
+  // Outside bets row 1: EVEN, ODD, 19-36
+  {
+    const row: { label: string; bet: BetType }[] = [
+      { label: "EVEN", bet: { kind: "even" } },
+      { label: "ODD", bet: { kind: "odd" } },
+      { label: "19-36", bet: { kind: "high" } },
+    ];
+    const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 1 && rs.cursorVC === i && rs.phase === "betting";
+    let ol = pad + spc(GUTTER_W) + (isCur(0) ? yd : d);
+    for (let i = 0; i < 3; i++) {
+      const ob = row[i]!;
+      const bet = findBet(rs, ob.bet);
+      ol += renderLabelCell(ob.label, CELL_W, isCur(i), bet);
+      if (i < 2) ol += (isCur(i) || isCur(i + 1)) ? yd : d;
+    }
+    ol += isCur(2) ? yd : d;
+    rawLines.push(ol);
+  }
+
+  // Bottom border of outside bets
+  {
+    const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 1 && rs.cursorVC === i && rs.phase === "betting";
+    let bb = pad + spc(GUTTER_W);
+    for (let c = 0; c < 3; c++) {
+      const hl = isCur(c);
+      bb += hl ? yx : x;
+      bb += dotFill(CELL_W, hl ? `${t.yellow}${t.bold}` : t.gray);
+      if (c === 2) bb += hl ? yx : x;
+    }
+    rawLines.push(bb);
+  }
+
+  // --- Merge history rail (always present, fills with spaces if no history) ---
+  const hist = [...rs.spinHistory].reverse();
+  const result: string[] = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    let histCol: string;
+    if (hasHist && i === 0) {
+      // "Hist" label on first line, padded to HIST_W
+      histCol = `${t.gray}Hist${t.reset}` + spc(HIST_W - 4);
+    } else if (hasHist && i - 1 >= 0 && i - 1 < hist.length) {
+      // Entries start on line 1 (scooted down by 1 for the label)
+      const entry = renderHistEntry(hist[i - 1]!);
+      const visLen = t.stripAnsi(entry).length;
+      histCol = entry + spc(HIST_W - visLen);
     } else {
-      dozenLine += `${border}│${t.gray}${label}${t.reset}`;
+      histCol = spc(HIST_W);
     }
+    result.push(spc(leftPad) + histCol + rawLines[i]!.slice(boardLeft));
   }
-  dozenLine += `${t.gray}│${t.reset}`;
-  lines.push(dozenLine);
+  return result;
+}
 
-  // Row 4 bottom border
-  let dozenBot = pad + " ".repeat(CELL_W);
-  for (let col = 0; col < 12; col++) {
-    dozenBot += col === 0 ? `${t.gray}├${"─".repeat(CELL_W - 1)}${t.reset}` : `${t.gray}┼${"─".repeat(CELL_W - 1)}${t.reset}`;
+// --- Helpers ---
+
+function spc(n: number): string { return " ".repeat(n); }
+
+function findBet(rs: AppState["roulette"], betType: BetType): number | null {
+  const bet = rs.bets.find(b => sameBetType(b.type, betType));
+  return bet ? bet.amount : null;
+}
+
+function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, isSpinHL: boolean = false): string {
+  const d = `${t.gray}${DOT}${t.reset}`;
+  // Use ceil for left pad to shift "0" right by 1 to align with middle column
+  const centerZero = (text: string, n: number) => {
+    const left = Math.ceil((n - text.length) / 2);
+    return spc(left) + text + spc(n - text.length - left);
+  };
+  if (isSpinHL) {
+    return `${d}${t.bgGreen}${t.white}${t.bold}${centerZero("0", w)}${t.reset}`;
   }
-  dozenBot += `${t.gray}┤${t.reset}`;
-  lines.push(dozenBot);
+  if (isCursor) {
+    const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
+    const raw = `0 ${CHIP}`;
+    const rawLen = raw.length;
+    const left = Math.ceil((w - rawLen) / 2);
+    const right = w - rawLen - left;
+    const ansiContent = `${spc(left)}${t.yellow}${t.bold}0 ${cc}${CHIP}${spc(right)}`;
+    return `${t.gray}${DOT}${t.reset}${ansiContent}${t.reset}`;
+  }
+  if (betAmount) {
+    const cc = chipColor(betAmount);
+    const raw = `0 ${CHIP}`;
+    const rawLen = raw.length;
+    const left = Math.ceil((w - rawLen) / 2);
+    const right = w - rawLen - left;
+    return `${d}${spc(left)}${t.green}${t.bold}0 ${cc}${CHIP}${spc(right)}${t.reset}`;
+  }
+  return `${d}${t.green}${t.bold}${centerZero("0", w)}${t.reset}`;
+}
 
-  // Row 5: Outside bets (1-18, Even, Red, Black, Odd, 19-36)
-  const outsideLabels = ["1-18", "EVEN", " RED", " BLK", " ODD", "19-36"];
-  const outsideColors = [t.white, t.white, t.red, t.white, t.white, t.white];
-  let outsideLine = pad + " ".repeat(CELL_W);
-  for (let o = 0; o < 6; o++) {
-    const cellWidth = CELL_W * 2;
-    const colStart = o * 2;
-    const isCursor = rs.cursorRow === 5 && Math.floor(rs.cursorCol / 2) === o && rs.phase === "betting";
-    const cell = cellAt(5, colStart)!;
-    const betOnThis = rs.bets.find(b => sameBet(cell, b.type));
-    const border = isCursor ? t.yellow : t.gray;
-    const olabel = outsideLabels[o] ?? "";
-    const label = olabel.padStart(Math.floor((cellWidth - 1 + olabel.length) / 2)).padEnd(cellWidth - 1);
-    const ocolor = outsideColors[o] ?? t.white;
+function renderNumberCell(
+  num: number, w: number, color: string,
+  isCursor: boolean, isSpinHL: boolean, betAmount: number | null,
+): string {
+  const numStr = String(num).padStart(2, " ");
+  const fgColor = color === "red" ? t.red : t.white;
 
-    if (isCursor) {
-      outsideLine += `${border}│${t.yellow}${t.bold}${label}${t.reset}`;
-    } else if (betOnThis) {
-      outsideLine += `${border}│${ocolor}${t.bold}${label}${t.reset}`;
-    } else {
-      outsideLine += `${border}│${t.gray}${label}${t.reset}`;
+  if (isCursor) {
+    const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
+    const raw = `${numStr} ${CHIP}`;
+    const ansiContent = `${t.yellow}${t.bold}${numStr} ${cc}${CHIP}`;
+    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+  }
+  if (isSpinHL) {
+    const bg = color === "red" ? t.bgRed : color === "green" ? t.bgGreen : t.bg256(240);
+    return `${bg}${t.white}${t.bold}${centerText(numStr, w)}${t.reset}`;
+  }
+  if (betAmount) {
+    const cc = chipColor(betAmount);
+    const raw = `${numStr} ${CHIP}`;
+    const ansiContent = `${fgColor}${t.bold}${numStr} ${cc}${CHIP}`;
+    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+  }
+  return `${fgColor}${centerText(numStr, w)}${t.reset}`;
+}
+
+function renderLabelCell(
+  label: string, w: number, isCursor: boolean, betAmount: number | null, labelColor?: string,
+): string {
+  if (isCursor) {
+    const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
+    const raw = `${label} ${CHIP}`;
+    const ansiContent = `${t.yellow}${t.bold}${label} ${cc}${CHIP}`;
+    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+  }
+  if (betAmount) {
+    const cc = chipColor(betAmount);
+    const lc = labelColor || t.white;
+    const raw = `${label} ${CHIP}`;
+    const ansiContent = `${lc}${label} ${cc}${CHIP}${lc}`;
+    return `${t.bold}${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+  }
+  const lc = labelColor || t.gray;
+  return `${lc}${centerText(label, w)}${t.reset}`;
+}
+
+// dozenLine: 0-6 sequential line within the dozen group (content=0,2,4,6 border=1,3,5)
+function renderDozenContent(
+  rs: AppState["roulette"], dozenIdx: number, dozenLine: number, w: number,
+): string {
+  const which = (dozenIdx + 1) as 1 | 2 | 3;
+  const isCursor = rs.cursorZone === "dozen" && rs.cursorVC === dozenIdx && rs.phase === "betting";
+  const bet = findBet(rs, { kind: "dozen", which });
+  const labels = ["1st 12", "2nd 12", "3rd 12"];
+  const label = labels[dozenIdx]!;
+
+  // Line 3: label
+  if (dozenLine === 3) {
+    if (isCursor) return `${t.yellow}${t.bold}${centerText(label, w)}${t.reset}`;
+    if (bet) return `${t.white}${t.bold}${centerText(label, w)}${t.reset}`;
+    return `${t.gray}${centerText(label, w)}${t.reset}`;
+  }
+  // Line 4: (2:1)
+  if (dozenLine === 4) {
+    if (isCursor) return `${t.yellow}${centerText("(2:1)", w)}${t.reset}`;
+    return `${t.gray}${centerText("(2:1)", w)}${t.reset}`;
+  }
+  // Line 5: chip
+  if (dozenLine === 5) {
+    if (isCursor && bet) {
+      const cc = chipColor(bet);
+      return centerWithAnsi(`${cc}${CHIP}`, CHIP, w);
     }
-  }
-  outsideLine += `${t.gray}│${t.reset}`;
-  lines.push(outsideLine);
-
-  // Row 5 bottom border
-  let outsideBot = pad + " ".repeat(CELL_W);
-  for (let col = 0; col < 12; col++) {
-    outsideBot += col === 0 ? `${t.gray}└${"─".repeat(CELL_W - 1)}${t.reset}` : `${t.gray}┴${"─".repeat(CELL_W - 1)}${t.reset}`;
-  }
-  outsideBot += `${t.gray}┘${t.reset}`;
-  lines.push(outsideBot);
-
-  // Row 6: Column bets (below the grid)
-  const colLabels = ["Col 1", "Col 2", "Col 3"];
-  let colLine = pad + " ".repeat(CELL_W);
-  for (let c = 0; c < 3; c++) {
-    const colWidth = CELL_W * 4;
-    const isCursor = rs.cursorRow === 6 && Math.floor(rs.cursorCol / 4) === c && rs.phase === "betting";
-    const cell = cellAt(6, c * 4)!;
-    const betOnThis = rs.bets.find(b => sameBet(cell, b.type));
-    const clabel = colLabels[c] ?? "";
-    const label = clabel.padStart(Math.floor((colWidth + clabel.length) / 2)).padEnd(colWidth);
-
-    if (isCursor) {
-      colLine += `${t.yellow}${t.bold}${label}${t.reset}`;
-    } else if (betOnThis) {
-      colLine += `${t.cyan}${t.bold}${label}${t.reset}`;
-    } else {
-      colLine += `${t.gray}${label}${t.reset}`;
+    if (isCursor) return centerWithAnsi(`${t.yellow}${t.bold}${CHIP}`, CHIP, w);
+    if (bet) {
+      const cc = chipColor(bet);
+      return centerWithAnsi(`${cc}${CHIP}`, CHIP, w);
     }
+    return spc(w);
   }
-  lines.push(colLine);
+  // Lines 3-6: empty
+  return spc(w);
+}
 
-  return lines;
+function centerText(text: string, w: number): string {
+  if (text.length >= w) return text.slice(0, w);
+  const left = Math.floor((w - text.length) / 2);
+  const right = w - text.length - left;
+  return spc(left) + text + spc(right);
+}
+
+function centerWithAnsi(ansiText: string, rawText: string, w: number): string {
+  const rawLen = rawText.length;
+  if (rawLen >= w) return ansiText;
+  const left = Math.floor((w - rawLen) / 2);
+  const right = w - rawLen - left;
+  return spc(left) + ansiText + spc(right);
 }
