@@ -21,6 +21,7 @@ export type BetType =
   | { kind: "straight"; number: number }
   | { kind: "split"; numbers: [number, number] }
   | { kind: "street"; row: number }
+  | { kind: "trio"; numbers: [number, number, number] }
   | { kind: "corner"; numbers: [number, number, number, number] }
   | { kind: "sixline"; rows: [number, number] }
   | { kind: "red" }

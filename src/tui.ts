@@ -211,9 +211,9 @@ function navigateUp(rs: RouletteState): void {
       if (rs.cursorVR > 0) {
         rs.cursorVR--;
       } else if (rs.cursorVR === 0) {
-        // Go to zero-split border (vr=-1), snap to even vc
+        // Go to zero-split border (vr=-1)
         rs.cursorVR = -1;
-        rs.cursorVC = rs.cursorVC % 2 === 0 ? rs.cursorVC : Math.max(0, rs.cursorVC - 1);
+        rs.cursorVC = Math.min(rs.cursorVC, VGRID_COLS - 1);
       } else {
         // vr=-1 → zero zone
         rs.cursorZone = "zero";
@@ -285,8 +285,7 @@ function navigateLeft(rs: RouletteState): void {
       break;
     case "grid":
       if (rs.cursorVR === -1) {
-        // Zero-split border: only even positions (0, 2, 4)
-        if (rs.cursorVC >= 2) rs.cursorVC -= 2;
+        if (rs.cursorVC > 0) rs.cursorVC--;
       } else if (rs.cursorVC > -1) {
         rs.cursorVC--;
       }
@@ -314,8 +313,7 @@ function navigateRight(rs: RouletteState): void {
       break;
     case "grid":
       if (rs.cursorVR === -1) {
-        // Zero-split border: only even positions (0, 2, 4)
-        if (rs.cursorVC <= 2) rs.cursorVC += 2;
+        if (rs.cursorVC < VGRID_COLS - 1) rs.cursorVC++;
       } else if (rs.cursorVC < VGRID_COLS - 1) {
         rs.cursorVC++;
       } else {

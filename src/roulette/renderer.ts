@@ -25,10 +25,23 @@ const CORNER_BR = "╯";
 const TJUNC_T = "┬";
 const BJUNC = "┴";
 const HLINE = "─";
+const HLINE_H = "━";
+const VLINE_H = "┃";
+const LJUNC_H = "┝";   // vertical light, right heavy (left edge of heavy bottom border)
+const XJUNC_H = "┿";   // vertical light, horizontal heavy (interior of heavy bottom border)
+const TJUNC_DH = "╁";  // down heavy, up + horizontal light (top of dozen left)
+const LJUNC_VH = "┨";  // vertical heavy, left light (non-boundary dozen left)
+const XJUNC_VH = "╂";  // vertical heavy, horizontal light (boundary dozen left)
+const XJUNC_DLH = "╃"; // down heavy, left heavy, up + right light (bottom grid-dozen corner)
 
 function hlineFill(n: number, color: string = t.gray): string {
   if (n <= 0) return "";
   return `${color}${HLINE.repeat(n)}${t.reset}`;
+}
+
+function hlineFillHeavy(n: number, color: string = t.gray): string {
+  if (n <= 0) return "";
+  return `${color}${HLINE_H.repeat(n)}${t.reset}`;
 }
 
 function chipColor(amount: number): string {
@@ -292,6 +305,7 @@ function renderBoard(state: AppState, width: number): string[] {
   const xj = `${t.gray}${XJUNC}${t.reset}`;
   const tj = `${t.gray}${TJUNC}${t.reset}`;
   const ytj = `${t.yellow}${t.bold}${TJUNC}${t.reset}`;
+  const vlh = `${t.gray}${VLINE_H}${t.reset}`;
 
   // No box highlighting for straight number bets — only split/corner/line bets highlight borders
 
@@ -336,11 +350,24 @@ function renderBoard(state: AppState, width: number): string[] {
       const vc = tc * 2;
       const splitCursor = rs.cursorZone === "grid" && rs.cursorVR === -1 && rs.cursorVC === vc && rs.phase === "betting";
       const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(-1, vc)));
-      const highlight = false;
 
-      const junc = tc === 0 ? LJUNC : TJUNC_T;
-      zb += `${t.gray}${junc}${t.reset}`;
+      // Junction (or trio chip at tc > 0)
+      if (tc === 0) {
+        zb += lj;
+      } else {
+        const trioVC = vc - 1;
+        const trioCursor = rs.cursorZone === "grid" && rs.cursorVR === -1 && rs.cursorVC === trioVC && rs.phase === "betting";
+        const trioBet = findBet(rs, gridPosToBet(virtualToGridPos(-1, trioVC)));
+        if (trioCursor) {
+          zb += `${trioBet ? chipColor(trioBet) : `${t.yellow}${t.bold}`}${CHIP}${t.reset}`;
+        } else if (trioBet) {
+          zb += `${chipColor(trioBet)}${t.bold}${CHIP}${t.reset}`;
+        } else {
+          zb += `${t.gray}${TJUNC_T}${t.reset}`;
+        }
+      }
 
+      // Split content
       if (splitCursor) {
         const cc = splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`;
         zb += hlineFillWithChip(CELL_W, t.gray, cc);
@@ -352,7 +379,7 @@ function renderBoard(state: AppState, width: number): string[] {
     }
     // Last cross: highlight if zero selected OR rightmost cell selected
     const lastHL = false;
-    zb += xj + hlineFill(DOZEN_W) + `${t.gray}${CORNER_TR}${t.reset}`;
+    zb += `${t.gray}${TJUNC_DH}${t.reset}` + hlineFill(DOZEN_W) + `${t.gray}${CORNER_TR}${t.reset}`;
     rawLines.push(zb);
   }
 
@@ -388,7 +415,7 @@ function renderBoard(state: AppState, width: number): string[] {
         }
       }
     }
-    cl += vl;
+    cl += vlh;
     // Dozen: sequential line index within group (content rows = 0,2,4,6; border rows = 1,3,5)
     const dozenLine = rowInDozen * 2;
     cl += renderDozenContent(rs, dozenIdx, dozenLine, DOZEN_W);
@@ -431,10 +458,10 @@ function renderBoard(state: AppState, width: number): string[] {
       }
 
       if (isDozenBoundary) {
-        bl += xj;
+        bl += `${t.gray}${XJUNC_VH}${t.reset}`;
         bl += hlineFill(DOZEN_W) + tj;
       } else {
-        bl += tj;
+        bl += `${t.gray}${LJUNC_VH}${t.reset}`;
         const dozenBorderLine = rowInDozen * 2 + 1;
         bl += renderDozenContent(rs, dozenIdx, dozenBorderLine, DOZEN_W) + vl;
       }
@@ -446,10 +473,10 @@ function renderBoard(state: AppState, width: number): string[] {
   {
     let bb = pad + spc(GUTTER_W);
     for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
-      bb += tc === 0 ? lj : xj;
-      bb += hlineFill(CELL_W);
+      bb += tc === 0 ? `${t.gray}${LJUNC_H}${t.reset}` : `${t.gray}${XJUNC_H}${t.reset}`;
+      bb += hlineFillHeavy(CELL_W);
     }
-    bb += xj + hlineFill(DOZEN_W) + `${t.gray}${CORNER_BR}${t.reset}`;
+    bb += `${t.gray}${XJUNC_DLH}${t.reset}` + hlineFill(DOZEN_W) + `${t.gray}${CORNER_BR}${t.reset}`;
     rawLines.push(bb);
   }
 
@@ -461,7 +488,7 @@ function renderBoard(state: AppState, width: number): string[] {
       const colWhich = (c + 1) as 1 | 2 | 3;
       const isCur = colCursor(c);
       const bet = findBet(rs, { kind: "column", which: colWhich });
-      cl += renderLabelCell("2:1", CELL_W, isCur, bet);
+      cl += renderLabelCell("2to1", CELL_W, isCur, bet);
       if (c < NUM_TABLE_COLS - 1) cl += vl;
     }
     cl += vl;
@@ -648,10 +675,9 @@ function renderDozenContent(
     if (bet) return `${t.white}${t.bold}${centerText(label, w)}${t.reset}`;
     return `${t.gray}${centerText(label, w)}${t.reset}`;
   }
-  // Line 4: (2:1)
+  // Line 4: empty (was (2:1))
   if (dozenLine === 4) {
-    if (isCursor) return `${t.yellow}${centerText("(2:1)", w)}${t.reset}`;
-    return `${t.gray}${centerText("(2:1)", w)}${t.reset}`;
+    return spc(w);
   }
   // Line 5: chip
   if (dozenLine === 5) {

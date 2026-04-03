@@ -54,14 +54,21 @@ export type GridPosition =
   | { kind: "hborder"; tableRow: number; tableCol: number }   // border below tableRow at tableCol
   | { kind: "vborder"; tableRow: number; tableCol: number }   // border right of tableCol at tableRow
   | { kind: "corner"; tableRow: number; tableCol: number }    // corner below-right of (tableRow, tableCol)
+  | { kind: "trio"; tableCol: number }                           // zero-row corner (0/1/2 or 0/2/3)
   | { kind: "street"; tableRow: number }                       // left edge at a row
   | { kind: "sixline"; tableRow: number };                     // left edge between rows
 
 // Convert virtual grid coords to grid position
 // vc can be -1 or VGRID_COLS for edge positions (street/sixline)
 export function virtualToGridPos(vr: number, vc: number): GridPosition {
-  // vr=-1: zero-to-row-1 border (splits between 0 and first row numbers)
+  // vr=-1: zero-to-row-1 border
   if (vr === -1) {
+    if (vc % 2 === 1) {
+      // Odd vc: trio bet (0/1/2 or 0/2/3)
+      const tableCol = Math.floor(vc / 2);
+      return { kind: "trio", tableCol };
+    }
+    // Even vc: split between 0 and first row number
     const tableCol = Math.floor(vc / 2);
     return { kind: "hborder", tableRow: 0, tableCol };
   }
@@ -103,6 +110,11 @@ export function gridPosToBet(pos: GridPosition): BetType {
       const sorted = [Math.min(n1, n2), Math.max(n1, n2)] as [number, number];
       return { kind: "split", numbers: sorted };
     }
+    case "trio": {
+      const nums = [0, numberAt(1, pos.tableCol), numberAt(1, pos.tableCol + 1)]
+        .sort((a, b) => a - b) as [number, number, number];
+      return { kind: "trio", numbers: nums };
+    }
     case "corner": {
       const nums = [
         numberAt(pos.tableRow, pos.tableCol),
@@ -129,6 +141,7 @@ export function isWinner(num: number, bet: BetType): boolean {
       const nums = [numberAt(bet.row, 0), numberAt(bet.row, 1), numberAt(bet.row, 2)];
       return nums.includes(num);
     }
+    case "trio": return bet.numbers.includes(num);
     case "corner": return bet.numbers.includes(num);
     case "sixline": {
       for (const r of bet.rows) {
@@ -159,6 +172,7 @@ export function payout(bet: BetType): number {
   switch (bet.kind) {
     case "straight": return 35;
     case "split": return 17;
+    case "trio": return 11;
     case "street": return 11;
     case "corner": return 8;
     case "sixline": return 5;
@@ -175,6 +189,10 @@ export function sameBetType(a: BetType, b: BetType): boolean {
     case "split": {
       const bb = b as typeof a;
       return a.numbers[0] === bb.numbers[0] && a.numbers[1] === bb.numbers[1];
+    }
+    case "trio": {
+      const bb = b as typeof a;
+      return a.numbers.every((n, i) => n === bb.numbers[i]);
     }
     case "street": return a.row === (b as typeof a).row;
     case "sixline": {
@@ -196,7 +214,8 @@ export function betLabel(bet: BetType): string {
   switch (bet.kind) {
     case "straight": return String(bet.number);
     case "split": return `${bet.numbers[0]}-${bet.numbers[1]}`;
-    case "street": return `St ${numberAt(bet.row, 2)}-${numberAt(bet.row, 0)}`;
+    case "trio": return `Trio ${bet.numbers[0]}-${bet.numbers[1]}-${bet.numbers[2]}`;
+    case "street": return `Street ${numberAt(bet.row, 0)}-${numberAt(bet.row, 2)}`;
     case "corner": return `${bet.numbers[0]}-${bet.numbers[3]}`;
     case "sixline": return `Line ${numberAt(bet.rows[0], 2)}-${numberAt(bet.rows[1], 0)}`;
     case "red": return "RED";
