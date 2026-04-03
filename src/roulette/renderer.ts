@@ -32,13 +32,13 @@ function hlineFill(n: number, color: string = t.gray): string {
 }
 
 function chipColor(amount: number): string {
-  if (amount >= 500) return t.magenta;
-  if (amount >= 100) return t.yellow;
-  if (amount >= 50)  return t.cyan;
-  if (amount >= 25)  return t.green;
-  if (amount >= 10)  return t.blue;
-  if (amount >= 5)   return t.red;
-  return t.white;
+  if (amount >= 500) return t.fg256(210); // bright coral/red
+  if (amount >= 100) return t.fg256(216); // bright orange
+  if (amount >= 50)  return t.fg256(228); // bright yellow
+  if (amount >= 25)  return t.fg256(156); // bright green
+  if (amount >= 10)  return t.fg256(123); // bright cyan
+  if (amount >= 5)   return t.fg256(111); // bright blue
+  return t.fg256(183); // lavender
 }
 
 function dotFill(n: number, color: string = t.gray): string {
@@ -52,6 +52,11 @@ function dotFillWithChip(n: number, dotColor: string, chipColorStr: string): str
   return `${dotColor}${DOT.repeat(mid)}${t.reset}${chipColorStr}${CHIP}${t.reset}${dotColor}${DOT.repeat(n - mid - 1)}${t.reset}`;
 }
 
+function hlineFillWithChip(n: number, lineColor: string, chipColorStr: string): string {
+  if (n <= 0) return "";
+  const mid = Math.floor(n / 2);
+  return `${lineColor}${HLINE.repeat(mid)}${t.reset}${chipColorStr}${CHIP}${t.reset}${lineColor}${HLINE.repeat(n - mid - 1)}${t.reset}`;
+}
 
 const HIST_W = 6; // " XX " + 2 spaces
 
@@ -333,18 +338,16 @@ function renderBoard(state: AppState, width: number): string[] {
       const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(-1, vc)));
       const highlight = false;
 
-      const junc = tc === 0 ? LJUNC : CROSS;
-      // Junction: highlight only for adjBelow (number cell selected), not for split cursor
-      const juncHL = false;
-      zb += `${juncHL ? `${t.yellow}${t.bold}` : t.gray}${junc}${t.reset}`;
+      const junc = tc === 0 ? LJUNC : TJUNC_T;
+      zb += `${t.gray}${junc}${t.reset}`;
 
       if (splitCursor) {
         const cc = splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`;
-        zb += dotFillWithChip(CELL_W, `${t.yellow}${t.bold}`, cc);
+        zb += hlineFillWithChip(CELL_W, t.gray, cc);
       } else if (splitBet) {
-        zb += dotFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
+        zb += hlineFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
       } else {
-        zb += dotFill(CELL_W, highlight ? `${t.yellow}${t.bold}` : t.gray);
+        zb += hlineFill(CELL_W);
       }
     }
     // Last cross: highlight if zero selected OR rightmost cell selected
@@ -381,7 +384,7 @@ function renderBoard(state: AppState, width: number): string[] {
         } else if (splitBet) {
           cl += `${chipColor(splitBet)}${t.bold}${CHIP}${t.reset}`;
         } else {
-          cl += d;
+          cl += vl;
         }
       }
     }
@@ -405,11 +408,11 @@ function renderBoard(state: AppState, width: number): string[] {
         const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(vrBorder, vc)));
         if (hSplitCursor) {
           const cc = splitBet ? chipColor(splitBet) : `${t.yellow}${t.bold}`;
-          bl += dotFillWithChip(CELL_W, `${t.yellow}${t.bold}`, cc);
+          bl += hlineFillWithChip(CELL_W, t.gray, cc);
         } else if (splitBet) {
-          bl += dotFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
+          bl += hlineFillWithChip(CELL_W, t.gray, `${chipColor(splitBet)}${t.bold}`);
         } else {
-          bl += dotFill(CELL_W);
+          bl += hlineFill(CELL_W);
         }
 
         if (tc < NUM_TABLE_COLS - 1) {
@@ -422,7 +425,7 @@ function renderBoard(state: AppState, width: number): string[] {
           } else if (cornerBet) {
             bl += `${chipColor(cornerBet)}${t.bold}${CHIP}${t.reset}`;
           } else {
-            bl += x;
+            bl += xj;
           }
         }
       }
@@ -443,7 +446,7 @@ function renderBoard(state: AppState, width: number): string[] {
   {
     let bb = pad + spc(GUTTER_W);
     for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
-      bb += tc === 0 ? lj : `${t.gray}${TJUNC_T}${t.reset}`;
+      bb += tc === 0 ? lj : xj;
       bb += hlineFill(CELL_W);
     }
     bb += xj + hlineFill(DOZEN_W) + `${t.gray}${CORNER_BR}${t.reset}`;
@@ -575,7 +578,7 @@ function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, 
     return spc(left) + text + spc(n - text.length - left);
   };
   if (isSpinHL) {
-    return `${d}${t.bgGreen}${t.white}${t.bold}${centerZero("0", w)}${t.reset}`;
+    return `${d}${wheelBg("green", 0)}${t.white}${t.bold}${centerZero("0", w)}${t.reset}`;
   }
   if (isCursor) {
     const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
@@ -603,7 +606,7 @@ function renderNumberCell(
     return labelWithChip(`${t.yellow}${t.bold}`, numStr, cc, w, chipRight);
   }
   if (isSpinHL) {
-    const bg = color === "red" ? t.bgRed : color === "green" ? t.bgGreen : t.bg256(240);
+    const bg = wheelBg(color as "red" | "green" | "black", 0);
     return `${bg}${t.white}${t.bold}${centerText(numStr, w)}${t.reset}`;
   }
   if (betAmount) {
