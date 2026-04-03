@@ -579,20 +579,13 @@ function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, 
   }
   if (isCursor) {
     const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
-    const raw = `0 ${CHIP}`;
-    const rawLen = raw.length;
-    const left = Math.ceil((w - rawLen) / 2);
-    const right = w - rawLen - left;
-    const ansiContent = `${spc(left)}${t.yellow}${t.bold}0 ${cc}${CHIP}${spc(right)}`;
-    return `${t.gray}${VLINE}${t.reset}${ansiContent}${t.reset}`;
+    const left = Math.ceil((w - 1) / 2);
+    return `${d}${spc(left)}${t.yellow}${t.bold}0${t.reset} ${cc}${CHIP}${t.reset}${spc(w - left - 3)}`;
   }
   if (betAmount) {
     const cc = chipColor(betAmount);
-    const raw = `0 ${CHIP}`;
-    const rawLen = raw.length;
-    const left = Math.ceil((w - rawLen) / 2);
-    const right = w - rawLen - left;
-    return `${d}${spc(left)}${t.green}${t.bold}0 ${cc}${CHIP}${spc(right)}${t.reset}`;
+    const left = Math.ceil((w - 1) / 2);
+    return `${d}${spc(left)}${t.green}${t.bold}0${t.reset} ${cc}${CHIP}${t.reset}${spc(w - left - 3)}`;
   }
   return `${d}${t.green}${t.bold}${centerZero("0", w)}${t.reset}`;
 }
@@ -603,12 +596,11 @@ function renderNumberCell(
 ): string {
   const numStr = String(num).padStart(2, " ");
   const fgColor = color === "red" ? t.red : t.white;
+  const chipRight = (num - 1) % 3 !== 2; // right col → chip left, others → chip right
 
   if (isCursor) {
     const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
-    const raw = `${numStr} ${CHIP}`;
-    const ansiContent = `${t.yellow}${t.bold}${numStr} ${cc}${CHIP}`;
-    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+    return labelWithChip(`${t.yellow}${t.bold}`, numStr, cc, w, chipRight);
   }
   if (isSpinHL) {
     const bg = color === "red" ? t.bgRed : color === "green" ? t.bgGreen : t.bg256(240);
@@ -616,9 +608,7 @@ function renderNumberCell(
   }
   if (betAmount) {
     const cc = chipColor(betAmount);
-    const raw = `${numStr} ${CHIP}`;
-    const ansiContent = `${fgColor}${t.bold}${numStr} ${cc}${CHIP}`;
-    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+    return labelWithChip(`${fgColor}${t.bold}`, numStr, cc, w, chipRight);
   }
   return `${fgColor}${centerText(numStr, w)}${t.reset}`;
 }
@@ -628,16 +618,12 @@ function renderLabelCell(
 ): string {
   if (isCursor) {
     const cc = betAmount ? chipColor(betAmount) : `${t.yellow}${t.bold}`;
-    const raw = `${label} ${CHIP}`;
-    const ansiContent = `${t.yellow}${t.bold}${label} ${cc}${CHIP}`;
-    return `${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+    return labelWithChip(`${t.yellow}${t.bold}`, label, cc, w, true);
   }
   if (betAmount) {
     const cc = chipColor(betAmount);
     const lc = labelColor || t.white;
-    const raw = `${label} ${CHIP}`;
-    const ansiContent = `${lc}${label} ${cc}${CHIP}${lc}`;
-    return `${t.bold}${centerWithAnsi(ansiContent, raw, w)}${t.reset}`;
+    return labelWithChip(`${lc}${t.bold}`, label, `${cc}`, w, true);
   }
   const lc = labelColor || t.gray;
   return `${lc}${centerText(label, w)}${t.reset}`;
@@ -694,4 +680,16 @@ function centerWithAnsi(ansiText: string, rawText: string, w: number): string {
   const left = Math.floor((w - rawLen) / 2);
   const right = w - rawLen - left;
   return spc(left) + ansiText + spc(right);
+}
+
+// Place chip next to label without shifting label position
+function labelWithChip(
+  labelAnsi: string, label: string, chipAnsi: string, w: number, chipRight: boolean,
+): string {
+  const leftPad = Math.floor((w - label.length) / 2);
+  const rightPad = w - label.length - leftPad;
+  if (chipRight) {
+    return `${spc(leftPad)}${labelAnsi}${label}${t.reset} ${chipAnsi}${CHIP}${t.reset}${spc(Math.max(0, rightPad - 2))}`;
+  }
+  return `${spc(Math.max(0, leftPad - 2))}${chipAnsi}${CHIP}${t.reset} ${labelAnsi}${label}${t.reset}${spc(rightPad)}`;
 }
