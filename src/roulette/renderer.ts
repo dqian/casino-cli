@@ -14,6 +14,22 @@ const GUTTER_W = 4; // left gutter for street/sixline
 const DOT = "·";
 const CROSS = "+";
 const CHIP = "●";
+const VLINE = "│";
+const TJUNC = "┤";
+const LJUNC = "├";
+const XJUNC = "┼";
+const CORNER_TL = "╭";
+const CORNER_TR = "╮";
+const CORNER_BL = "╰";
+const CORNER_BR = "╯";
+const TJUNC_T = "┬";
+const BJUNC = "┴";
+const HLINE = "─";
+
+function hlineFill(n: number, color: string = t.gray): string {
+  if (n <= 0) return "";
+  return `${color}${HLINE.repeat(n)}${t.reset}`;
+}
 
 function chipColor(amount: number): string {
   if (amount >= 500) return t.magenta;
@@ -264,6 +280,13 @@ function renderBoard(state: AppState, width: number): string[] {
   const x = `${t.gray}${CROSS}${t.reset}`;
   const yd = `${t.yellow}${t.bold}${DOT}${t.reset}`;
   const yx = `${t.yellow}${t.bold}${CROSS}${t.reset}`;
+  const vl = `${t.gray}${VLINE}${t.reset}`;
+  const yvl = `${t.yellow}${t.bold}${VLINE}${t.reset}`;
+  const lj = `${t.gray}${LJUNC}${t.reset}`;
+  const ylj = `${t.yellow}${t.bold}${LJUNC}${t.reset}`;
+  const xj = `${t.gray}${XJUNC}${t.reset}`;
+  const tj = `${t.gray}${TJUNC}${t.reset}`;
+  const ytj = `${t.yellow}${t.bold}${TJUNC}${t.reset}`;
 
   // No box highlighting for straight number bets — only split/corner/line bets highlight borders
 
@@ -293,11 +316,13 @@ function renderBoard(state: AppState, width: number): string[] {
   // --- Zero row (no dozen column) ---
   const zeroSel = rs.cursorZone === "zero" && rs.phase === "betting";
   const zeroBet = findBet(rs, { kind: "straight", number: 0 });
-  // Top border (zero only — no dozen, crosses at corners)
-  rawLines.push(pad + spc(GUTTER_W) + x + dotFill(gridInner) + x);
+  // Top border (zero only — no dozen, rounded corners)
+  const ctl = `${t.gray}${CORNER_TL}${t.reset}`;
+  const ctr = `${t.gray}${CORNER_TR}${t.reset}`;
+  rawLines.push(pad + spc(GUTTER_W) + ctl + hlineFill(gridInner) + ctr);
   // Zero content
   const zeroSpinHL = (rs.phase === "spinning" || rs.phase === "result") && rs.spinHighlight === 0;
-  rawLines.push(pad + spc(GUTTER_W) + renderZeroCell(gridInner, zeroSel, zeroBet, zeroSpinHL) + d);
+  rawLines.push(pad + spc(GUTTER_W) + renderZeroCell(gridInner, zeroSel, zeroBet, zeroSpinHL) + vl);
 
   // Zero-to-grid border + dozen column top
   {
@@ -308,7 +333,7 @@ function renderBoard(state: AppState, width: number): string[] {
       const splitBet = findBet(rs, gridPosToBet(virtualToGridPos(-1, vc)));
       const highlight = false;
 
-      const junc = CROSS;
+      const junc = tc === 0 ? LJUNC : CROSS;
       // Junction: highlight only for adjBelow (number cell selected), not for split cursor
       const juncHL = false;
       zb += `${juncHL ? `${t.yellow}${t.bold}` : t.gray}${junc}${t.reset}`;
@@ -324,7 +349,7 @@ function renderBoard(state: AppState, width: number): string[] {
     }
     // Last cross: highlight if zero selected OR rightmost cell selected
     const lastHL = false;
-    zb += `${lastHL ? `${t.yellow}${t.bold}` : t.gray}${CROSS}${t.reset}` + dotFill(DOZEN_W) + x;
+    zb += xj + hlineFill(DOZEN_W) + `${t.gray}${CORNER_TR}${t.reset}`;
     rawLines.push(zb);
   }
 
@@ -335,7 +360,7 @@ function renderBoard(state: AppState, width: number): string[] {
     const rowInDozen = (tr - 1) % 4;
 
     // Content line
-    let cl = pad + renderGutter(vr) + d;
+    let cl = pad + renderGutter(vr) + vl;
 
     for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
       const vc = tc * 2;
@@ -360,11 +385,11 @@ function renderBoard(state: AppState, width: number): string[] {
         }
       }
     }
-    cl += d;
+    cl += vl;
     // Dozen: sequential line index within group (content rows = 0,2,4,6; border rows = 1,3,5)
     const dozenLine = rowInDozen * 2;
     cl += renderDozenContent(rs, dozenIdx, dozenLine, DOZEN_W);
-    cl += d;
+    cl += vl;
     rawLines.push(cl);
 
     // Border row
@@ -372,7 +397,7 @@ function renderBoard(state: AppState, width: number): string[] {
       const vrBorder = vr + 1;
       const isDozenBoundary = tr % 4 === 0;
 
-      let bl = pad + renderGutter(vrBorder) + x;
+      let bl = pad + renderGutter(vrBorder) + lj;
 
       for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
         const vc = tc * 2;
@@ -402,73 +427,57 @@ function renderBoard(state: AppState, width: number): string[] {
         }
       }
 
-      bl += x;
       if (isDozenBoundary) {
-        bl += dotFill(DOZEN_W) + x;
+        bl += xj;
+        bl += hlineFill(DOZEN_W) + tj;
       } else {
+        bl += tj;
         const dozenBorderLine = rowInDozen * 2 + 1;
-        bl += renderDozenContent(rs, dozenIdx, dozenBorderLine, DOZEN_W) + d;
+        bl += renderDozenContent(rs, dozenIdx, dozenBorderLine, DOZEN_W) + vl;
       }
       rawLines.push(bl);
     }
   }
 
-  // Bottom border of number grid + dozen (cursor-aware for last row highlight)
+  // Bottom border of number grid + dozen
   {
-    const lastVR = (NUM_TABLE_ROWS - 1) * 2; // vr=22
-    // Check if cursor is on the last row of numbers
-    const isOnLastRow = (tc: number) => {
-      return rs.cursorZone === "column" && rs.cursorVC === tc && rs.phase === "betting";
-    };
     let bb = pad + spc(GUTTER_W);
     for (let tc = 0; tc < NUM_TABLE_COLS; tc++) {
-      const hl = isOnLastRow(tc);
-      const prevHL = tc > 0 && isOnLastRow(tc - 1);
-      bb += (hl || prevHL) ? yx : x;
-      bb += dotFill(CELL_W, hl ? `${t.yellow}${t.bold}` : t.gray);
+      bb += tc === 0 ? lj : `${t.gray}${TJUNC_T}${t.reset}`;
+      bb += hlineFill(CELL_W);
     }
-    const lastHL = isOnLastRow(NUM_TABLE_COLS - 1);
-    bb += (lastHL ? yx : x) + dotFill(DOZEN_W) + x;
+    bb += xj + hlineFill(DOZEN_W) + `${t.gray}${CORNER_BR}${t.reset}`;
     rawLines.push(bb);
   }
 
   // Column bets (2:1)
   {
     const colCursor = (c: number) => rs.cursorZone === "column" && rs.cursorVC === c && rs.phase === "betting";
-    let cl = pad + spc(GUTTER_W) + (colCursor(0) ? yd : d);
+    let cl = pad + spc(GUTTER_W) + vl;
     for (let c = 0; c < NUM_TABLE_COLS; c++) {
       const colWhich = (c + 1) as 1 | 2 | 3;
       const isCur = colCursor(c);
       const bet = findBet(rs, { kind: "column", which: colWhich });
       cl += renderLabelCell("2:1", CELL_W, isCur, bet);
-      if (c < NUM_TABLE_COLS - 1) {
-        cl += (colCursor(c) || colCursor(c + 1)) ? yd : d;
-      }
+      if (c < NUM_TABLE_COLS - 1) cl += vl;
     }
-    cl += (colCursor(2) ? yd : d);
+    cl += vl;
     rawLines.push(cl);
   }
 
   // Helper for 3-col outside border lines with cursor highlight
-  function outsideBorder3(curRow: number): string {
-    const above = curRow - 1;
-    const below = curRow;
-    const curAbove = (c: number) => rs.cursorZone === "outside" && rs.cursorVR === above && rs.cursorVC === c && rs.phase === "betting";
-    const curBelow = (c: number) => rs.cursorZone === "outside" && rs.cursorVR === below && rs.cursorVC === c && rs.phase === "betting";
-    const colCur = (c: number) => rs.cursorZone === "column" && rs.cursorVC === c && rs.phase === "betting";
-    const hl = (c: number) => (above >= 0 && curAbove(c)) || (below <= 1 && curBelow(c)) || (above < 0 && colCur(c));
+  function outsideBorder3(): string {
     let line = pad + spc(GUTTER_W);
     for (let c = 0; c < 3; c++) {
-      const prevHL = c > 0 && hl(c - 1);
-      line += (hl(c) || prevHL) ? yx : x;
-      line += dotFill(CELL_W, hl(c) ? `${t.yellow}${t.bold}` : t.gray);
+      line += c === 0 ? lj : xj;
+      line += hlineFill(CELL_W);
     }
-    line += hl(2) ? yx : x;
+    line += tj;
     return line;
   }
 
   // Border above outside row 0
-  rawLines.push(outsideBorder3(0));
+  rawLines.push(outsideBorder3());
 
   // Outside bets row 0: RED, BLK, 1-18
   {
@@ -478,19 +487,19 @@ function renderBoard(state: AppState, width: number): string[] {
       { label: "1-18", bet: { kind: "low" } },
     ];
     const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 0 && rs.cursorVC === i && rs.phase === "betting";
-    let ol = pad + spc(GUTTER_W) + (isCur(0) ? yd : d);
+    let ol = pad + spc(GUTTER_W) + vl;
     for (let i = 0; i < 3; i++) {
       const ob = row[i]!;
       const bet = findBet(rs, ob.bet);
       ol += renderLabelCell(ob.label, CELL_W, isCur(i), bet, ob.color);
-      if (i < 2) ol += (isCur(i) || isCur(i + 1)) ? yd : d;
+      if (i < 2) ol += vl;
     }
-    ol += isCur(2) ? yd : d;
+    ol += vl;
     rawLines.push(ol);
   }
 
   // Border between outside rows
-  rawLines.push(outsideBorder3(1));
+  rawLines.push(outsideBorder3());
 
   // Outside bets row 1: EVEN, ODD, 19-36
   {
@@ -500,26 +509,30 @@ function renderBoard(state: AppState, width: number): string[] {
       { label: "19-36", bet: { kind: "high" } },
     ];
     const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 1 && rs.cursorVC === i && rs.phase === "betting";
-    let ol = pad + spc(GUTTER_W) + (isCur(0) ? yd : d);
+    let ol = pad + spc(GUTTER_W) + vl;
     for (let i = 0; i < 3; i++) {
       const ob = row[i]!;
       const bet = findBet(rs, ob.bet);
       ol += renderLabelCell(ob.label, CELL_W, isCur(i), bet);
-      if (i < 2) ol += (isCur(i) || isCur(i + 1)) ? yd : d;
+      if (i < 2) ol += vl;
     }
-    ol += isCur(2) ? yd : d;
+    ol += vl;
     rawLines.push(ol);
   }
 
   // Bottom border of outside bets
   {
-    const isCur = (i: number) => rs.cursorZone === "outside" && rs.cursorVR === 1 && rs.cursorVC === i && rs.phase === "betting";
+    const cbl = `${t.gray}${CORNER_BL}${t.reset}`;
+    const cbr = `${t.gray}${CORNER_BR}${t.reset}`;
     let bb = pad + spc(GUTTER_W);
     for (let c = 0; c < 3; c++) {
-      const hl = isCur(c);
-      bb += hl ? yx : x;
-      bb += dotFill(CELL_W, hl ? `${t.yellow}${t.bold}` : t.gray);
-      if (c === 2) bb += hl ? yx : x;
+      if (c === 0) {
+        bb += cbl;
+      } else {
+        bb += `${t.gray}${BJUNC}${t.reset}`;
+      }
+      bb += hlineFill(CELL_W);
+      if (c === 2) bb += cbr;
     }
     rawLines.push(bb);
   }
@@ -555,7 +568,7 @@ function findBet(rs: AppState["roulette"], betType: BetType): number | null {
 }
 
 function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, isSpinHL: boolean = false): string {
-  const d = `${t.gray}${DOT}${t.reset}`;
+  const d = `${t.gray}${VLINE}${t.reset}`;
   // Use ceil for left pad to shift "0" right by 1 to align with middle column
   const centerZero = (text: string, n: number) => {
     const left = Math.ceil((n - text.length) / 2);
@@ -571,7 +584,7 @@ function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, 
     const left = Math.ceil((w - rawLen) / 2);
     const right = w - rawLen - left;
     const ansiContent = `${spc(left)}${t.yellow}${t.bold}0 ${cc}${CHIP}${spc(right)}`;
-    return `${t.gray}${DOT}${t.reset}${ansiContent}${t.reset}`;
+    return `${t.gray}${VLINE}${t.reset}${ansiContent}${t.reset}`;
   }
   if (betAmount) {
     const cc = chipColor(betAmount);
