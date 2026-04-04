@@ -55,6 +55,7 @@ export interface RouletteState {
   spinFrame: number;          // animation frame counter
   spinTarget: number;         // final landing number
   spinHighlight: number;      // currently highlighted number during animation
+  spinHalfStep: boolean;      // pointer between numbers (shifted by half slot)
   winAmount: number;          // amount won on last spin
   spinHistory: number[];       // last N spin results
   showResultTimer: ReturnType<typeof setTimeout> | null;

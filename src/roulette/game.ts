@@ -89,7 +89,7 @@ export function spin(state: AppState, render: () => void): void {
   state.roulette.spinTarget = target;
 
   const targetIdx = WHEEL_ORDER.indexOf(target);
-  const totalFrames = 40 + Math.floor(Math.random() * 25);
+  const totalFrames = 80 + Math.floor(Math.random() * 50);
   const startIdx = Math.floor(Math.random() * WHEEL_ORDER.length);
   // Randomize the easing power (2.0–4.0) and number of rotations (2–5)
   const easePower = 2.0 + Math.random() * 2.0;
@@ -116,6 +116,7 @@ function animateSpin(
   if (frame > totalFrames) {
     const finalNum = WHEEL_ORDER[targetIdx] ?? 0;
     state.roulette.spinHighlight = finalNum;
+    state.roulette.spinHalfStep = false;
     state.roulette.result = finalNum;
 
     let winnings = 0;
@@ -137,10 +138,11 @@ function animateSpin(
   const progress = frame / totalFrames;
   const eased = 1 - Math.pow(1 - progress, easePower);
   const totalTravel = rotations * WHEEL_ORDER.length + ((targetIdx - startIdx + WHEEL_ORDER.length) % WHEEL_ORDER.length);
-  const currentTravel = Math.floor(totalTravel * eased);
-  const currentIdx = (startIdx + currentTravel) % WHEEL_ORDER.length;
+  const currentHalfTravel = Math.floor(totalTravel * 2 * eased);
+  const currentIdx = (startIdx + Math.floor(currentHalfTravel / 2)) % WHEEL_ORDER.length;
 
   state.roulette.spinHighlight = WHEEL_ORDER[currentIdx] ?? 0;
+  state.roulette.spinHalfStep = currentHalfTravel % 2 === 1;
   state.roulette.spinFrame = frame;
   render();
 

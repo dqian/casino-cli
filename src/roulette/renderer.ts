@@ -130,7 +130,7 @@ export function renderRouletteScreen(state: AppState): string[] {
   // Wheel / status area (above the board) — always exactly 5 lines
   lines.push("");
   if (rs.phase === "spinning") {
-    lines.push(...renderWheel(rs.spinHighlight, width));
+    lines.push(...renderWheel(rs.spinHighlight, width, rs.spinHalfStep));
     lines.push(centerAnsi(`${t.yellow}Spinning...${t.reset}`, width));
     lines.push("");
   } else if (rs.phase === "result") {
@@ -241,26 +241,45 @@ function wheelBg(color: "red" | "green" | "black", dist: number): string {
   return t.bg256(232);
 }
 
-function renderWheel(highlight: number, width: number): string[] {
+function renderWheel(highlight: number, width: number, halfStep: boolean = false): string[] {
   const idx = WHEEL_ORDER.indexOf(highlight);
   const windowSize = 9;
   const half = Math.floor(windowSize / 2);
+  const slotW = 4; // each slot is " XX "
+  const totalVisW = windowSize * slotW; // always 36 visible chars
 
-  // Pointer line (triangle above center)
-  const pointerPad = half * 4 + 1; // each slot is 4 chars wide, center at half
+  // Pointer line (fixed position)
+  const pointerPad = half * slotW + 1;
   const pointerLine = centerAnsi(spc(pointerPad) + `${t.gray}▼${t.reset}` + spc(pointerPad), width);
 
-  let parts: string[] = [];
-  for (let i = -half; i <= half; i++) {
+  // Build wheel: render windowSize+1 slots, then slice to totalVisW visible chars
+  // On half-step, offset by 2 chars (half a slot)
+  const offset = halfStep ? 2 : 0;
+  let wheel = "";
+  for (let i = -half; i <= half + 1; i++) {
     const wheelIdx = (idx + i + WHEEL_ORDER.length) % WHEEL_ORDER.length;
     const num = WHEEL_ORDER[wheelIdx] ?? 0;
     const color = numberColor(num);
-    const dist = Math.abs(i);
-    let numStr = String(num).padStart(2, " ");
-    const bg = wheelBg(color, dist);
-    parts.push(`${bg}${t.white}${t.bold} ${numStr} ${t.reset}`);
+    const dist = Math.abs(i - (halfStep ? 0.5 : 0));
+    const intDist = Math.round(dist);
+    const bg = wheelBg(color, intDist);
+    const numStr = String(num).padStart(2, " ");
+    // Each slot: 4 chars " XX "
+    const slotChars = [" ", numStr[0]!, numStr[1]!, " "];
+    for (let c = 0; c < 4; c++) {
+      wheel += `${bg}${t.white}${t.bold}${slotChars[c]}${t.reset}`;
+    }
   }
-  return [pointerLine, centerAnsi(parts.join(""), width)];
+  // Extract totalVisW chars starting at offset (each visible char is wrapped in ANSI)
+  // Since each visible char is its own ANSI segment, split by reset and take the right range
+  const segments: string[] = [];
+  const re = /(\x1b\[[0-9;]*m)*[^\x1b](\x1b\[[0-9;]*m)*/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(wheel)) !== null) {
+    segments.push(m[0]!);
+  }
+  const sliced = segments.slice(offset, offset + totalVisW).join("");
+  return [pointerLine, centerAnsi(sliced, width)];
 }
 
 function centerAnsi(text: string, width: number): string {

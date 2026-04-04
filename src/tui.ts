@@ -19,6 +19,7 @@ function createRouletteState(): RouletteState {
     spinFrame: 0,
     spinTarget: 0,
     spinHighlight: 0,
+    spinHalfStep: false,
     winAmount: 0,
     spinHistory: [],
     showResultTimer: null,
