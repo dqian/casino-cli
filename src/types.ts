@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette";
+export type Screen = "menu" | "roulette" | "blackjack";
 
 export type MenuItem = {
   name: string;
@@ -17,6 +17,7 @@ export interface AppState {
   message: string;
   messageTimeout: ReturnType<typeof setTimeout> | null;
   roulette: RouletteState;
+  blackjack: BlackjackState;
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result";
@@ -67,4 +68,43 @@ export interface RouletteState {
   ballVY: number;              // vertical velocity
   ballVX: number;              // horizontal velocity
   ballBouncing: boolean;       // ball still in motion
+}
+
+// Blackjack types
+export type Rank = 'A' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K';
+export type Suit = '♠' | '♥' | '♦' | '♣';
+
+export interface Card {
+  rank: Rank;
+  suit: Suit;
+}
+
+export type HandResult = 'win' | 'lose' | 'push' | 'blackjack' | 'bust';
+
+export interface BlackjackHand {
+  cards: Card[];
+  bet: number;
+  doubled: boolean;
+  stood: boolean;
+  result: HandResult | null;
+}
+
+export type BlackjackPhase = 'betting' | 'playing' | 'dealer' | 'result';
+
+export interface BlackjackState {
+  phase: BlackjackPhase;
+  shoe: Card[];
+  cutCard: number;              // cards remaining when cut card is hit
+  playerHands: BlackjackHand[];
+  activeHand: number;
+  dealerCards: Card[];
+  dealerRevealed: boolean;
+  betAmount: number;
+  winAmount: number;
+  cardAnim: CardAnim | null;  // slide-in animation for any card
+}
+
+export interface CardAnim {
+  target: 'dealer' | 'player';  // which hand is receiving the card
+  frame: number;                // current animation frame
 }

@@ -1,15 +1,17 @@
 import type { AppState, MenuItem } from "./types";
 import * as t from "./theme";
 import { renderRouletteScreen, renderHotkeyGrid } from "./roulette/renderer";
+import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer";
 
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
-  { name: "Blackjack", screen: null, label: "Coming Soon" },
+  { name: "Blackjack", screen: "blackjack", label: "2-Deck, 3:2" },
+  { name: "Baccarat", screen: null, label: "Coming Soon" },
   { name: "Craps", screen: null, label: "Coming Soon" },
 ];
 
 export function renderScreen(state: AppState): void {
-  if (state.screen === "roulette") {
+  if (state.screen === "roulette" || state.screen === "blackjack") {
     renderGameScreen(state);
     return;
   }
@@ -143,10 +145,17 @@ function renderMenuScreen(state: AppState): void {
 
 function renderGameScreen(state: AppState): void {
   const { columns: width, rows: height } = process.stdout;
-  const lines = renderRouletteScreen(state);
 
-  // Render hotkey grid at bottom
-  const hotkeyLines = renderHotkeyGrid(width, state.roulette.phase);
+  let lines: string[];
+  let hotkeyLines: string[];
+
+  if (state.screen === "blackjack") {
+    lines = renderBlackjackScreen(state);
+    hotkeyLines = renderBjHotkeyGrid(width, state);
+  } else {
+    lines = renderRouletteScreen(state);
+    hotkeyLines = renderHotkeyGrid(width, state.roulette.phase);
+  }
   const hotkeyHeight = hotkeyLines.length + 1; // +1 for separator
 
   // Fill space between content and hotkeys

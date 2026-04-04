@@ -7,6 +7,7 @@ Terminal-based casino games built with Bun + TypeScript. Zero external dependenc
 ## Games
 
 - **Roulette** — European (single zero) with full bet support: straight, split, street, corner, trio, sixline, dozen, column, and outside bets. Features animated wheel spin with bouncing ball physics.
+- **Blackjack** — 2-deck shoe with 3:2 payout. Hit, stand, double down, and split. Auto-reshuffles when fewer than 30 cards remain. Animated dealer draw.
 
 ## Quick Start
 

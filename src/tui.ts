@@ -1,9 +1,11 @@
-import type { AppState, RouletteState, CursorZone } from "./types";
+import type { AppState, RouletteState, BlackjackState, CursorZone } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
 import { placeBet, removeBet, clearBets, spin, newRound, totalBets } from "./roulette/game";
 import { VGRID_ROWS, VGRID_COLS } from "./roulette/board";
+import { deal, hit, resolveHit, stand, doubleDown, resolveDouble, split, dealerPlay, skipDealer, newBjRound, startDealAnimation, animateHit, animateDouble, skipCardAnim } from "./blackjack/game";
+import { createShoe } from "./blackjack/deck";
 
 const CHIP_SIZES = [1, 5, 10, 25, 50, 100, 500];
 
@@ -33,6 +35,25 @@ function createRouletteState(): RouletteState {
   };
 }
 
+function randomCutCard(): number {
+  return 10 + Math.floor(Math.random() * 31); // 10-40
+}
+
+function createBlackjackState(): BlackjackState {
+  return {
+    phase: "betting",
+    shoe: createShoe(2),
+    cutCard: randomCutCard(),
+    playerHands: [],
+    activeHand: 0,
+    dealerCards: [],
+    dealerRevealed: false,
+    betAmount: 25,
+    winAmount: 0,
+    cardAnim: null,
+  };
+}
+
 function createState(): AppState {
   return {
     screen: "menu",
@@ -43,6 +64,7 @@ function createState(): AppState {
     message: "",
     messageTimeout: null,
     roulette: createRouletteState(),
+    blackjack: createBlackjackState(),
   };
 }
 
@@ -110,6 +132,8 @@ export function startTui(): void {
       handleMenuKey(state, key, exit);
     } else if (state.screen === "roulette") {
       handleRouletteKey(state, key, render);
+    } else if (state.screen === "blackjack") {
+      handleBlackjackKey(state, key, render);
     }
 
     render();
@@ -132,6 +156,8 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
         state.screen = item.screen;
         if (item.screen === "roulette") {
           state.roulette = createRouletteState();
+        } else if (item.screen === "blackjack") {
+          newBjRound(state);
         }
         state.message = "";
       } else {
@@ -248,6 +274,107 @@ function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, re
       state.message = "";
       break;
     }
+  }
+}
+
+function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, render: () => void): void {
+  const bj = state.blackjack;
+
+  // Card animation in progress: Enter skips
+  if (bj.cardAnim) {
+    if (key.name === "return") {
+      skipCardAnim(state);
+    }
+    return;
+  }
+
+  // Dealer phase: only Enter to skip
+  if (bj.phase === "dealer") {
+    if (key.name === "return") {
+      skipDealer(state);
+    }
+    return;
+  }
+
+  // Result phase
+  if (bj.phase === "result") {
+    if (key.name === "return") {
+      newBjRound(state);
+    } else if (key.name === "q" || key.name === "escape") {
+      state.screen = "menu";
+      state.message = "";
+    }
+    return;
+  }
+
+  // Playing phase
+  if (bj.phase === "playing") {
+    switch (key.name) {
+      case "return":
+        hit(state);
+        animateHit(state, render, () => {
+          resolveHit(state);
+          render();
+          startDealerIfNeeded(state, render);
+        });
+        return;
+      case "s": stand(state); break;
+      case "d":
+        doubleDown(state);
+        if (bj.playerHands[bj.activeHand]?.doubled) {
+          animateDouble(state, render, () => {
+            resolveDouble(state);
+            render();
+            startDealerIfNeeded(state, render);
+          });
+          return;
+        }
+        break;
+      case "p": split(state); break;
+      case "q":
+      case "escape":
+        state.screen = "menu";
+        state.message = "";
+        return;
+    }
+    startDealerIfNeeded(state, render);
+    return;
+  }
+
+  // Betting phase
+  switch (key.name) {
+    case "return":
+      deal(state);
+      startDealAnimation(state, render);
+      return;
+    case "up":
+    case "right":
+      if (bj.betAmount < 5) bj.betAmount = 5;
+      else if (bj.betAmount < 10) bj.betAmount = 10;
+      else if (bj.betAmount < 25) bj.betAmount = 25;
+      else if (bj.betAmount < 50) bj.betAmount = 50;
+      else bj.betAmount += 25;
+      break;
+    case "down":
+    case "left":
+      if (bj.betAmount > 50) bj.betAmount -= 25;
+      else if (bj.betAmount > 25) bj.betAmount = 25;
+      else if (bj.betAmount > 10) bj.betAmount = 10;
+      else if (bj.betAmount > 5) bj.betAmount = 5;
+      else if (bj.betAmount > 1) bj.betAmount = 1;
+      break;
+    case "q":
+    case "escape":
+      state.screen = "menu";
+      state.message = "";
+      break;
+  }
+}
+
+function startDealerIfNeeded(state: AppState, render: () => void): void {
+  if (state.blackjack.phase === "dealer") {
+    render();
+    dealerPlay(state, render);
   }
 }
 
