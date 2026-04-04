@@ -43,6 +43,7 @@ export interface Bet {
 }
 
 export type CursorZone = "zero" | "grid" | "column" | "dozen" | "outside";
+export type WheelMode = "arrow" | "ball";
 
 export interface RouletteState {
   phase: RoulettePhase;
@@ -59,4 +60,11 @@ export interface RouletteState {
   winAmount: number;          // amount won on last spin
   spinHistory: number[];       // last N spin results
   showResultTimer: ReturnType<typeof setTimeout> | null;
+  wheelMode: WheelMode;
+  ballRow: number;             // 0-3 for bounce lines, 4 = settled on wheel
+  ballCol: number;             // horizontal offset from center
+  ballY: number;               // continuous vertical position (0=top, 3=floor)
+  ballVY: number;              // vertical velocity
+  ballVX: number;              // horizontal velocity
+  ballBouncing: boolean;       // ball still in motion
 }

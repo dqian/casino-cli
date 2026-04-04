@@ -81,6 +81,7 @@ const HOTKEYS: { key: string; label: string }[] = [
   { key: "Enter", label: "Spin" },
   { key: "+/-", label: "Chip size" },
   { key: "x", label: "Remove bet" },
+  { key: "w", label: "Wheel mode" },
   { key: "q", label: "Menu" },
 ];
 
@@ -120,21 +121,53 @@ export function renderRouletteScreen(state: AppState): string[] {
 
   // Header
   const balanceStr = `$${state.balance.toLocaleString()}`;
-  const chipStr = `Chip: $${rs.betAmount}`;
+  const modeIcon = rs.wheelMode === "ball" ? "Ball" : "Arrow";
+  const chipStr = `${modeIcon} | Chip: $${rs.betAmount}`;
   const header = `  ${t.bold}${t.yellow}ROULETTE${t.reset}  ${t.green}${balanceStr}${t.reset}`;
   const headerRight = `${t.gray}${chipStr}${t.reset}  `;
   const headerPad = Math.max(0, width - t.stripAnsi(header).length - t.stripAnsi(headerRight).length);
   lines.push(header + " ".repeat(headerPad) + headerRight);
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
 
-  // Wheel / status area (above the board) — always exactly 5 lines
-  lines.push("");
+  // Wheel / status area — pointer char depends on ball mode
+  const useBall = rs.wheelMode === "ball";
+  let pointerChar = "▼";
+  if (useBall) {
+    if (rs.phase === "spinning") {
+      pointerChar = rs.ballBouncing ? " " : "●";
+    } else if (rs.phase === "result") {
+      pointerChar = "●";
+    }
+  }
+
+  // Ball bounce area — directly above the wheel strip.
+  // In ball mode: 6 rows (absorbs the pointer line). Otherwise: 5 empty + pointer via renderWheel.
+  const showBall = rs.wheelMode === "ball" && rs.phase === "spinning" && rs.ballRow <= 5;
+  if (showBall) {
+    const wheelCenter = Math.floor(width / 2);
+    for (let row = 0; row < 6; row++) {
+      if (row === rs.ballRow) {
+        const col = Math.max(0, Math.min(width - 1, wheelCenter + Math.round(rs.ballCol)));
+        lines.push(" ".repeat(col) + `${t.brightWhite}${t.bold}●${t.reset}`);
+      } else {
+        lines.push("");
+      }
+    }
+  } else {
+    lines.push("", "", "", "", "");
+  }
   if (rs.phase === "spinning") {
-    lines.push(...renderWheel(rs.spinHighlight, width, rs.spinHalfStep));
+    const wheelLines = renderWheel(rs.spinHighlight, width, rs.spinHalfStep, pointerChar);
+    if (showBall) {
+      // Ball area already includes the pointer row — only push the wheel strip
+      lines.push(wheelLines[1] ?? "");
+    } else {
+      lines.push(...wheelLines);
+    }
     lines.push(centerAnsi(`${t.yellow}Spinning...${t.reset}`, width));
     lines.push("");
   } else if (rs.phase === "result") {
-    lines.push(...renderWheel(rs.spinHighlight, width));
+    lines.push(...renderWheel(rs.spinHighlight, width, false, pointerChar));
     if (rs.winAmount > 0) {
       lines.push(centerAnsi(`${t.green}${t.bold}WIN $${rs.winAmount.toLocaleString()}!${t.reset}`, width));
     } else {
@@ -241,45 +274,51 @@ function wheelBg(color: "red" | "green" | "black", dist: number): string {
   return t.bg256(232);
 }
 
-function renderWheel(highlight: number, width: number, halfStep: boolean = false): string[] {
+function renderWheel(highlight: number, width: number, halfStep: boolean = false, pointerChar: string = "▼"): string[] {
   const idx = WHEEL_ORDER.indexOf(highlight);
   const windowSize = 9;
   const half = Math.floor(windowSize / 2);
   const slotW = 4; // each slot is " XX "
-  const totalVisW = windowSize * slotW; // always 36 visible chars
 
   // Pointer line (fixed position)
   const pointerPad = half * slotW + 1;
-  const pointerLine = centerAnsi(spc(pointerPad) + `${t.gray}▼${t.reset}` + spc(pointerPad), width);
+  const pointerLine = pointerChar.trim()
+    ? centerAnsi(spc(pointerPad) + `${t.gray}${pointerChar}${t.reset}` + spc(pointerPad), width)
+    : "";
 
-  // Build wheel: render windowSize+1 slots, then slice to totalVisW visible chars
-  // On half-step, offset by 2 chars (half a slot)
-  const offset = halfStep ? 2 : 0;
+  if (!halfStep) {
+    let wheel = "";
+    for (let i = -half; i <= half; i++) {
+      const wheelIdx = (idx + i + WHEEL_ORDER.length) % WHEEL_ORDER.length;
+      const num = WHEEL_ORDER[wheelIdx] ?? 0;
+      const color = numberColor(num);
+      const bg = wheelBg(color, Math.abs(i));
+      wheel += `${bg}${t.white}${t.bold} ${String(num).padStart(2, " ")} ${t.reset}`;
+    }
+    return [pointerLine, centerAnsi(wheel, width)];
+  }
+
+  // Half-step: shift wheel left by 2 chars. Render windowSize+1 slots,
+  // trim 2 chars from left of first slot and 2 from right of last slot.
   let wheel = "";
   for (let i = -half; i <= half + 1; i++) {
     const wheelIdx = (idx + i + WHEEL_ORDER.length) % WHEEL_ORDER.length;
     const num = WHEEL_ORDER[wheelIdx] ?? 0;
     const color = numberColor(num);
-    const dist = Math.abs(i - (halfStep ? 0.5 : 0));
-    const intDist = Math.round(dist);
-    const bg = wheelBg(color, intDist);
+    const dist = Math.round(Math.abs(i - 0.5));
+    const bg = wheelBg(color, dist);
     const numStr = String(num).padStart(2, " ");
-    // Each slot: 4 chars " XX "
-    const slotChars = [" ", numStr[0]!, numStr[1]!, " "];
-    for (let c = 0; c < 4; c++) {
-      wheel += `${bg}${t.white}${t.bold}${slotChars[c]}${t.reset}`;
+    if (i === -half) {
+      // First slot: show only last 2 chars ("X ")
+      wheel += `${bg}${t.white}${t.bold}${numStr[1]} ${t.reset}`;
+    } else if (i === half + 1) {
+      // Last slot: show only first 2 chars (" X")
+      wheel += `${bg}${t.white}${t.bold} ${numStr[0]}${t.reset}`;
+    } else {
+      wheel += `${bg}${t.white}${t.bold} ${numStr} ${t.reset}`;
     }
   }
-  // Extract totalVisW chars starting at offset (each visible char is wrapped in ANSI)
-  // Since each visible char is its own ANSI segment, split by reset and take the right range
-  const segments: string[] = [];
-  const re = /(\x1b\[[0-9;]*m)*[^\x1b](\x1b\[[0-9;]*m)*/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(wheel)) !== null) {
-    segments.push(m[0]!);
-  }
-  const sliced = segments.slice(offset, offset + totalVisW).join("");
-  return [pointerLine, centerAnsi(sliced, width)];
+  return [pointerLine, centerAnsi(wheel, width)];
 }
 
 function centerAnsi(text: string, width: number): string {

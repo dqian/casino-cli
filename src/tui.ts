@@ -23,6 +23,13 @@ function createRouletteState(): RouletteState {
     winAmount: 0,
     spinHistory: [],
     showResultTimer: null,
+    wheelMode: "ball",
+    ballRow: 0,
+    ballCol: 0,
+    ballY: 0,
+    ballVY: 0,
+    ballVX: 0,
+    ballBouncing: false,
   };
 }
 
@@ -227,6 +234,10 @@ function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, re
       }
       break;
     }
+    case "w":
+      rs.wheelMode = rs.wheelMode === "arrow" ? "ball" : "arrow";
+      state.message = `Wheel: ${rs.wheelMode === "arrow" ? "Arrow" : "Ball"} mode`;
+      break;
     case "q":
     case "escape": {
       const betTotal = totalBets(state);
