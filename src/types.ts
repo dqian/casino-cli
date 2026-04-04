@@ -125,3 +125,10 @@ export interface CardAnim {
   target: 'dealer' | 'player';  // which hand is receiving the card
   frame: number;                // current animation frame
 }
+
+// Game module interface — each game implements this for TUI dispatch
+export interface GameModule {
+  handleKey(state: AppState, key: import("./keybindings").KeyEvent, render: () => void): void;
+  render(state: AppState): string[];
+  renderHotkeys(width: number, state: AppState): string[];
+}

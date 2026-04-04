@@ -410,19 +410,6 @@ export function skipCardAnim(state: AppState): void {
   state.blackjack.cardAnim = null;
 }
 
-function animateSequence(
-  state: AppState,
-  render: () => void,
-  sequence: ('dealer' | 'player')[],
-  onDone: () => void,
-): void {
-  if (sequence.length === 0) { onDone(); return; }
-  const [first, ...rest] = sequence;
-  animateCard(state, render, first!, () => {
-    animateSequence(state, render, rest, onDone);
-  });
-}
-
 export function startDealAnimation(state: AppState, render: () => void): void {
   animSkipped = false;
   const bj = state.blackjack;

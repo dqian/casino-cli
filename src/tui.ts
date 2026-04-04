@@ -1,13 +1,30 @@
-import type { AppState, RouletteState, BlackjackState, GameOptions, CursorZone } from "./types";
+import type { AppState, RouletteState, BlackjackState, GameOptions, GameModule } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
-import { placeBet, removeBet, clearBets, spin, newRound, totalBets } from "./roulette/game";
-import { VGRID_ROWS, VGRID_COLS } from "./roulette/board";
-import { deal, hit, resolveHit, stand, doubleDown, resolveDouble, split, dealerPlay, skipDealer, newBjRound, startDealAnimation, animateHit, animateDouble, skipCardAnim, takeInsurance, declineInsurance } from "./blackjack/game";
-import { createShoe } from "./blackjack/deck";
+import { createShoe } from "./shared/cards";
+import { newBjRound } from "./blackjack/game";
+import { handleRouletteKey } from "./roulette/handler";
+import { handleBlackjackKey } from "./blackjack/handler";
+import { renderRouletteScreen, renderHotkeyGrid as renderRouletteHotkeys } from "./roulette/renderer";
+import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer";
 
-const CHIP_SIZES = [1, 5, 10, 25, 50, 100, 500];
+// --- Game registry ---
+
+export const GAMES: Record<string, GameModule> = {
+  roulette: {
+    handleKey: handleRouletteKey,
+    render: renderRouletteScreen,
+    renderHotkeys: (w, s) => renderRouletteHotkeys(w, s.roulette.phase),
+  },
+  blackjack: {
+    handleKey: handleBlackjackKey,
+    render: renderBlackjackScreen,
+    renderHotkeys: renderBjHotkeyGrid,
+  },
+};
+
+// --- State creation ---
 
 function createDefaultOptions(): GameOptions {
   return {
@@ -85,6 +102,8 @@ function createState(): AppState {
   };
 }
 
+// --- TUI lifecycle ---
+
 function cleanup(): void {
   process.stdout.write(t.mouseOff + t.showCursor + t.reset + t.altScreenOff);
   if (process.stdin.isTTY) {
@@ -113,7 +132,6 @@ export function startTui(): void {
   setInterval(() => {
     if (state.screen === "menu") {
       state.menuAnimFrame++;
-      // Only render when visual state changes
       const shimmerCycle = 250;
       const shimmerSweep = 10;
       const shimmerFrame = state.menuAnimFrame % shimmerCycle;
@@ -145,19 +163,21 @@ export function startTui(): void {
       return;
     }
 
-    if (state.screen === "menu") {
+    // Game dispatch via registry
+    const game = GAMES[state.screen];
+    if (game) {
+      game.handleKey(state, key, render);
+    } else if (state.screen === "menu") {
       handleMenuKey(state, key, exit);
     } else if (state.screen === "options") {
       handleOptionsKey(state, key);
-    } else if (state.screen === "roulette") {
-      handleRouletteKey(state, key, render);
-    } else if (state.screen === "blackjack") {
-      handleBlackjackKey(state, key, render);
     }
 
     render();
   });
 }
+
+// --- Menu ---
 
 function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: () => void): void {
   switch (key.name) {
@@ -176,7 +196,6 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
         if (item.screen === "roulette") {
           state.roulette = createRouletteState(state.options);
         } else if (item.screen === "blackjack") {
-          // Recreate shoe if deck count changed
           const optDecks = state.options.blackjack.numDecks;
           if (state.blackjack.numDecks !== optDecks) {
             state.blackjack.shoe = createShoe(optDecks);
@@ -198,7 +217,6 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       state.message = "";
       break;
     case "m":
-      // Toggle money mode
       if (state.moneyMode === "play") {
         state.moneyMode = "real";
         state.balance = 0;
@@ -234,7 +252,7 @@ const DECK_OPTIONS = [1, 2, 4, 6, 8];
 
 function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): void {
   const opts = state.options;
-  const total = 3; // 3 option rows
+  const total = 3;
 
   switch (key.name) {
     case "up":
@@ -247,19 +265,19 @@ function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): vo
     case "right": {
       const dir = key.name === "right" ? 1 : -1;
       switch (state.optionsCursor) {
-        case 0: { // wheel mode
+        case 0: {
           const idx = WHEEL_MODES.indexOf(opts.roulette.defaultWheelMode);
           const next = (idx + dir + WHEEL_MODES.length) % WHEEL_MODES.length;
           opts.roulette.defaultWheelMode = WHEEL_MODES[next]!;
           break;
         }
-        case 1: { // table max
+        case 1: {
           const idx = TABLE_MAX_OPTIONS.indexOf(opts.roulette.tableMax);
           const next = Math.max(0, Math.min(TABLE_MAX_OPTIONS.length - 1, idx + dir));
           opts.roulette.tableMax = TABLE_MAX_OPTIONS[next]!;
           break;
         }
-        case 2: { // deck count
+        case 2: {
           const idx = DECK_OPTIONS.indexOf(opts.blackjack.numDecks);
           const next = Math.max(0, Math.min(DECK_OPTIONS.length - 1, idx + dir));
           opts.blackjack.numDecks = DECK_OPTIONS[next]!;
@@ -274,367 +292,4 @@ function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): vo
       state.message = "";
       break;
   }
-}
-
-function handleRouletteKey(state: AppState, key: ReturnType<typeof parseKey>, render: () => void): void {
-  const rs = state.roulette;
-
-  if (rs.phase === "spinning") {
-    if (key.name === "return") {
-      // Skip to result
-      rs.spinFrame = 9999;
-    }
-    return;
-  }
-
-  if (rs.phase === "result") {
-    if (key.name === "return" || key.name === "up" || key.name === "down" || key.name === "left" || key.name === "right") {
-      newRound(state);
-    } else if (key.name === "escape" || key.name === "q") {
-      state.screen = "menu";
-      state.message = "";
-    }
-    return;
-  }
-
-  switch (key.name) {
-    case "up":
-      navigateUp(rs);
-      state.message = "";
-      break;
-    case "down":
-      navigateDown(rs);
-      state.message = "";
-      break;
-    case "left":
-      navigateLeft(rs);
-      state.message = "";
-      break;
-    case "right":
-      navigateRight(rs);
-      state.message = "";
-      break;
-    case " ":
-      placeBet(state);
-      break;
-    case "x":
-      removeBet(state);
-      break;
-    case "return":
-      spin(state, render);
-      break;
-    case "c":
-      clearBets(state);
-      break;
-    case "+":
-    case "=": {
-      const idx = CHIP_SIZES.indexOf(rs.betAmount);
-      if (idx >= 0 && idx < CHIP_SIZES.length - 1) {
-        rs.betAmount = CHIP_SIZES[idx + 1]!;
-      }
-      break;
-    }
-    case "-":
-    case "_": {
-      const idx = CHIP_SIZES.indexOf(rs.betAmount);
-      if (idx > 0) {
-        rs.betAmount = CHIP_SIZES[idx - 1]!;
-      }
-      break;
-    }
-    case "w":
-      rs.wheelMode = rs.wheelMode === "arrow" ? "ball" : "arrow";
-      state.message = `Wheel: ${rs.wheelMode === "arrow" ? "Arrow" : "Ball"} mode`;
-      break;
-    case "q":
-    case "escape": {
-      const betTotal = totalBets(state);
-      if (betTotal > 0) {
-        clearBets(state);
-      }
-      state.screen = "menu";
-      state.message = "";
-      break;
-    }
-  }
-}
-
-function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, render: () => void): void {
-  const bj = state.blackjack;
-
-  // Card animation in progress: Enter skips
-  if (bj.cardAnim) {
-    if (key.name === "return") {
-      skipCardAnim(state);
-    }
-    return;
-  }
-
-  // Insurance phase: y/n
-  if (bj.phase === "insurance") {
-    if (key.name === "y") {
-      takeInsurance(state);
-    } else if (key.name === "n") {
-      declineInsurance(state);
-    }
-    return;
-  }
-
-  // Dealer phase: only Enter to skip
-  if (bj.phase === "dealer") {
-    if (key.name === "return") {
-      skipDealer(state);
-    }
-    return;
-  }
-
-  // Result phase
-  if (bj.phase === "result") {
-    if (key.name === "return") {
-      newBjRound(state);
-    } else if (key.name === "h") {
-      bj.showHint = !bj.showHint;
-    } else if (key.name === "c") {
-      bj.showCount = !bj.showCount;
-    } else if (key.name === "q" || key.name === "escape") {
-      state.screen = "menu";
-      state.message = "";
-    }
-    return;
-  }
-
-  // Playing phase
-  if (bj.phase === "playing") {
-    switch (key.name) {
-      case "return":
-        hit(state);
-        animateHit(state, render, () => {
-          resolveHit(state);
-          render();
-          startDealerIfNeeded(state, render);
-        });
-        return;
-      case "s": stand(state); break;
-      case "d":
-        doubleDown(state);
-        if (bj.playerHands[bj.activeHand]?.doubled) {
-          animateDouble(state, render, () => {
-            resolveDouble(state);
-            render();
-            startDealerIfNeeded(state, render);
-          });
-          return;
-        }
-        break;
-      case "p": split(state); break;
-      case "h":
-        bj.showHint = !bj.showHint;
-        return;
-      case "c":
-        bj.showCount = !bj.showCount;
-        return;
-      case "q":
-      case "escape":
-        state.screen = "menu";
-        state.message = "";
-        return;
-    }
-    startDealerIfNeeded(state, render);
-    return;
-  }
-
-  // Betting phase
-  switch (key.name) {
-    case "return":
-      deal(state);
-      startDealAnimation(state, render);
-      return;
-    case "h":
-      bj.showHint = !bj.showHint;
-      return;
-    case "c":
-      bj.showCount = !bj.showCount;
-      return;
-    case "up":
-    case "right":
-      if (bj.betAmount < 5) bj.betAmount = 5;
-      else if (bj.betAmount < 10) bj.betAmount = 10;
-      else if (bj.betAmount < 25) bj.betAmount = 25;
-      else if (bj.betAmount < 50) bj.betAmount = 50;
-      else bj.betAmount += 25;
-      break;
-    case "down":
-    case "left":
-      if (bj.betAmount > 50) bj.betAmount -= 25;
-      else if (bj.betAmount > 25) bj.betAmount = 25;
-      else if (bj.betAmount > 10) bj.betAmount = 10;
-      else if (bj.betAmount > 5) bj.betAmount = 5;
-      else if (bj.betAmount > 1) bj.betAmount = 1;
-      break;
-    case "q":
-    case "escape":
-      state.screen = "menu";
-      state.message = "";
-      break;
-  }
-}
-
-function startDealerIfNeeded(state: AppState, render: () => void): void {
-  if (state.blackjack.phase === "dealer") {
-    render();
-    dealerPlay(state, render);
-  }
-}
-
-// --- Navigation ---
-// Zones layout:
-//   zero          (top, above grid)
-//   grid + dozen  (grid is main area, dozen is to the right)
-//   column        (below grid, the 2:1 row)
-//   outside       (below column, 6 outside bets)
-
-function navigateUp(rs: RouletteState): void {
-  switch (rs.cursorZone) {
-    case "zero":
-      break; // already at top
-    case "grid":
-      if (rs.cursorVR > 0) {
-        rs.cursorVR--;
-      } else if (rs.cursorVR === 0) {
-        // Go to zero-split border (vr=-1)
-        rs.cursorVR = -1;
-        rs.cursorVC = Math.min(rs.cursorVC, VGRID_COLS - 1);
-      } else {
-        // vr=-1 → zero zone
-        rs.cursorZone = "zero";
-        rs.cursorVC = 0;
-      }
-      break;
-    case "dozen":
-      if (rs.cursorVC > 0) {
-        rs.cursorVC--;
-      }
-      break;
-    case "column":
-      rs.cursorZone = "grid";
-      rs.cursorVR = VGRID_ROWS - 1;
-      rs.cursorVC = Math.min(VGRID_COLS - 1, rs.cursorVC * 2);
-      break;
-    case "outside":
-      if (rs.cursorVR > 0) {
-        rs.cursorVR = 0;
-        rs.cursorVC = Math.min(2, rs.cursorVC);
-      } else {
-        rs.cursorZone = "column";
-        rs.cursorVC = Math.min(2, rs.cursorVC);
-      }
-      break;
-  }
-}
-
-function navigateDown(rs: RouletteState): void {
-  switch (rs.cursorZone) {
-    case "zero":
-      // Down from zero → zero-split border
-      rs.cursorZone = "grid";
-      rs.cursorVR = -1;
-      rs.cursorVC = 2; // center split
-      break;
-    case "grid":
-      if (rs.cursorVR < VGRID_ROWS - 1) {
-        rs.cursorVR++;
-      } else {
-        rs.cursorZone = "column";
-        // Map grid vc to column position (0-2)
-        const vc = rs.cursorVC < 0 ? 0 : rs.cursorVC >= VGRID_COLS ? 2 : Math.floor(rs.cursorVC / 2);
-        rs.cursorVC = vc;
-      }
-      break;
-    case "dozen":
-      if (rs.cursorVC < 2) {
-        rs.cursorVC++;
-      }
-      break;
-    case "column":
-      rs.cursorZone = "outside";
-      rs.cursorVR = 0;
-      rs.cursorVC = Math.min(2, rs.cursorVC);
-      break;
-    case "outside":
-      if (rs.cursorVR === 0) {
-        rs.cursorVR = 1;
-        rs.cursorVC = Math.min(2, rs.cursorVC);
-      }
-      break; // row 1 is bottom
-  }
-}
-
-function navigateLeft(rs: RouletteState): void {
-  switch (rs.cursorZone) {
-    case "zero":
-      break;
-    case "grid":
-      if (rs.cursorVR === -1) {
-        if (rs.cursorVC > 0) rs.cursorVC--;
-      } else if (rs.cursorVC > -1) {
-        rs.cursorVC--;
-      }
-      break;
-    case "dozen": {
-      // Left from dozen → back to grid at rightmost cell
-      const dozenIdx = rs.cursorVC;
-      rs.cursorZone = "grid";
-      rs.cursorVR = dozenToGridVR(dozenIdx);
-      rs.cursorVC = VGRID_COLS - 1;
-      break;
-    }
-    case "column":
-      if (rs.cursorVC > 0) rs.cursorVC--;
-      break;
-    case "outside":
-      if (rs.cursorVC > 0) rs.cursorVC--;
-      break;
-  }
-}
-
-function navigateRight(rs: RouletteState): void {
-  switch (rs.cursorZone) {
-    case "zero":
-      break;
-    case "grid":
-      if (rs.cursorVR === -1) {
-        if (rs.cursorVC < VGRID_COLS - 1) rs.cursorVC++;
-      } else if (rs.cursorVC < VGRID_COLS - 1) {
-        rs.cursorVC++;
-      } else {
-        // Right from rightmost grid column → dozen zone
-        rs.cursorZone = "dozen";
-        rs.cursorVC = gridVRToDOzen(rs.cursorVR);
-      }
-      break;
-    case "dozen":
-      break; // rightmost zone
-    case "column":
-      if (rs.cursorVC < 2) rs.cursorVC++;
-      break;
-    case "outside":
-      if (rs.cursorVC < 2) rs.cursorVC++;
-      break;
-  }
-}
-
-// Map grid virtual row to dozen index (0-2)
-function gridVRToDOzen(vr: number): number {
-  const tableRow = Math.floor(vr / 2) + 1; // 1-12
-  if (tableRow <= 4) return 0;
-  if (tableRow <= 8) return 1;
-  return 2;
-}
-
-// Map dozen index to grid virtual row (center of that dozen's rows)
-function dozenToGridVR(dozenIdx: number): number {
-  // Dozen 0 covers table rows 1-4 → vr 0-6, center at vr 3
-  // Dozen 1 covers table rows 5-8 → vr 8-14, center at vr 11
-  // Dozen 2 covers table rows 9-12 → vr 16-22, center at vr 19
-  return dozenIdx * 8 + 3;
 }

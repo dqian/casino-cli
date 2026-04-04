@@ -3,6 +3,10 @@ import * as t from "../theme";
 import { handValue, isBlackjack, hiLoValue } from "./deck";
 import { canSplit, canDouble } from "./game";
 import { getBasicStrategyHint } from "./strategy";
+import { renderHeader } from "../shared/render";
+import { sliceAnsi } from "../shared/render";
+import { renderHotkeySplit } from "../shared/render";
+import type { HotkeyItem } from "../shared/render";
 
 const CARD_H = 9;
 const INNER_W = 9;
@@ -23,12 +27,6 @@ const PIP_LAYOUTS: Record<string, { c: number; r: number }[]> = {
   '9':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:2}, {c:7,r:2}, {c:4,r:3}, {c:1,r:4}, {c:7,r:4}, {c:1,r:5}, {c:7,r:5}],
   '10': [{c:1,r:1}, {c:7,r:1}, {c:4,r:2}, {c:1,r:2}, {c:7,r:2}, {c:1,r:4}, {c:7,r:4}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
 };
-
-function center(text: string, width: number): string {
-  const visLen = t.stripAnsi(text).length;
-  const pad = Math.max(0, Math.floor((width - visLen) / 2));
-  return " ".repeat(pad) + text;
-}
 
 function renderPipBody(clr: string, suit: string, rank: Rank): string[] {
   const pips = PIP_LAYOUTS[rank] ?? [];
@@ -211,30 +209,6 @@ function renderHandCards(
   return lines;
 }
 
-// Slice an ANSI-colored string by visual character positions [start, end)
-function sliceAnsi(str: string, start: number, end: number): string {
-  let result = "";
-  let visPos = 0;
-  let i = 0;
-  while (i < str.length) {
-    if (str[i] === '\x1b' && str[i + 1] === '[') {
-      const escStart = i;
-      i += 2;
-      while (i < str.length && str[i] !== 'm') i++;
-      i++;
-      if (visPos >= start && visPos < end) result += str.slice(escStart, i);
-      continue;
-    }
-    if (visPos >= end) break;
-    if (visPos >= start) result += str[i];
-    visPos++;
-    i++;
-  }
-  // Ensure we close any open ANSI sequences
-  if (result.length > 0) result += t.reset;
-  return result;
-}
-
 function renderCardCountLine(cards: Card[], faceDownIndices: number[]): string {
   let line = "";
   for (let i = 0; i < cards.length; i++) {
@@ -261,11 +235,8 @@ export function renderBlackjackScreen(state: AppState): string[] {
   const lines: string[] = [];
   const bj = state.blackjack;
 
-  // Header — matches roulette style
-  const balStr = `$${state.balance.toLocaleString()}`;
-  const header = `  ${t.bold}${t.yellow}BLACKJACK${t.reset}  ${t.green}${balStr}${t.reset}`;
-  lines.push(header);
-  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+  // Header
+  lines.push(...renderHeader("BLACKJACK", state.balance, width));
 
   // Shoe bar — depleting bar with yellow cut card, stretches full width
   const totalShoe = bj.numDecks * 52;
@@ -447,9 +418,8 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
 
 export function renderBjHotkeyGrid(width: number, state: AppState): string[] {
   const bj = state.blackjack;
-  type HK = { key: string; label: string };
-  let left: HK[] = [];
-  let right: HK[] = [];
+  let left: HotkeyItem[] = [];
+  let right: HotkeyItem[] = [];
 
   switch (bj.phase) {
     case "betting":
@@ -498,38 +468,5 @@ export function renderBjHotkeyGrid(width: number, state: AppState): string[] {
       break;
   }
 
-  const all = [...left, ...right];
-  if (all.length === 0) return [""];
-
-  function renderCell(h: HK, maxK: number, maxL: number): string {
-    return `${t.white}${t.bold}${h.key.padStart(maxK)}${t.reset}  ${t.gray}${h.label.padEnd(maxL)}${t.reset}`;
-  }
-
-  // Render left group flush-left, right group flush-right
-  const maxRows = Math.max(left.length, right.length);
-  const lMaxK = left.length > 0 ? Math.max(...left.map(h => h.key.length)) : 0;
-  const lMaxL = left.length > 0 ? Math.max(...left.map(h => h.label.length)) : 0;
-  const rMaxK = right.length > 0 ? Math.max(...right.map(h => h.key.length)) : 0;
-  const rMaxL = right.length > 0 ? Math.max(...right.map(h => h.label.length)) : 0;
-  const rightColW = rMaxK + 2 + rMaxL;
-  const margin = 2; // left/right margin
-
-  const gridLines: string[] = [];
-  for (let r = 0; r < maxRows; r++) {
-    let leftPart = "";
-    if (r < left.length) {
-      leftPart = renderCell(left[r]!, lMaxK, lMaxL);
-    }
-    const leftVisLen = t.stripAnsi(leftPart).length;
-
-    let rightPart = "";
-    if (r < right.length) {
-      rightPart = renderCell(right[r]!, rMaxK, rMaxL);
-    }
-    const rightVisLen = t.stripAnsi(rightPart).length;
-
-    const gap = Math.max(2, width - margin * 2 - leftVisLen - rightVisLen);
-    gridLines.push(" ".repeat(margin) + leftPart + " ".repeat(gap) + rightPart);
-  }
-  return gridLines;
+  return renderHotkeySplit(left, right, width);
 }

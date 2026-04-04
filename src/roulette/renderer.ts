@@ -1,5 +1,7 @@
 import type { AppState, BetType } from "../types";
 import * as t from "../theme";
+import { centerAnsi } from "../shared/render";
+import { renderHeader } from "../shared/render";
 import {
   numberColor, numberAt, sameBetType, WHEEL_ORDER, betLabel,
   virtualToGridPos, gridPosToBet, payout,
@@ -120,14 +122,9 @@ export function renderRouletteScreen(state: AppState): string[] {
   const rs = state.roulette;
 
   // Header
-  const balanceStr = `$${state.balance.toLocaleString()}`;
   const modeIcon = rs.wheelMode === "ball" ? "Ball" : "Arrow";
-  const chipStr = `${modeIcon} | Chip: $${rs.betAmount}`;
-  const header = `  ${t.bold}${t.yellow}ROULETTE${t.reset}  ${t.green}${balanceStr}${t.reset}`;
-  const headerRight = `${t.gray}${chipStr}${t.reset}  `;
-  const headerPad = Math.max(0, width - t.stripAnsi(header).length - t.stripAnsi(headerRight).length);
-  lines.push(header + " ".repeat(headerPad) + headerRight);
-  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+  const rightContent = `${t.gray}${modeIcon} | Chip: $${rs.betAmount}${t.reset}  `;
+  lines.push(...renderHeader("ROULETTE", state.balance, width, rightContent));
 
   // Wheel / status area — pointer char depends on ball mode
   const useBall = rs.wheelMode === "ball";
@@ -321,12 +318,6 @@ function renderWheel(highlight: number, width: number, halfStep: boolean = false
   return [pointerLine, centerAnsi(wheel, width)];
 }
 
-function centerAnsi(text: string, width: number): string {
-  const visLen = t.stripAnsi(text).length;
-  const pad = Math.max(0, Math.floor((width - visLen) / 2));
-  return " ".repeat(pad) + text;
-}
-
 function renderHistEntry(num: number): string {
   const color = numberColor(num);
   const bg = wheelBg(color, 1);
@@ -435,8 +426,6 @@ function renderBoard(state: AppState, width: number): string[] {
         zb += hlineFill(CELL_W);
       }
     }
-    // Last cross: highlight if zero selected OR rightmost cell selected
-    const lastHL = false;
     zb += `${t.gray}${TJUNC_DH}${t.reset}` + hlineFill(DOZEN_W) + `${t.gray}${CORNER_TR}${t.reset}`;
     rawLines.push(zb);
   }
