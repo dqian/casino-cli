@@ -29,7 +29,9 @@ function createState(): AppState {
   return {
     screen: "menu",
     balance: 1000,
+    moneyMode: "play",
     menuCursor: 0,
+    menuAnimFrame: 0,
     message: "",
     messageTimeout: null,
     roulette: createRouletteState(),
@@ -58,6 +60,24 @@ export function startTui(): void {
 
   const render = () => renderScreen(state);
   render();
+
+  // Animate menu (shimmer + cursor)
+  let lastRenderedFrame = -1;
+  setInterval(() => {
+    if (state.screen === "menu") {
+      state.menuAnimFrame++;
+      // Only render when visual state changes
+      const shimmerCycle = 250;
+      const shimmerSweep = 10;
+      const shimmerFrame = state.menuAnimFrame % shimmerCycle;
+      const cursorIdx = Math.floor(state.menuAnimFrame / 6);
+      const visualKey = shimmerFrame < shimmerSweep ? state.menuAnimFrame : cursorIdx;
+      if (visualKey !== lastRenderedFrame) {
+        lastRenderedFrame = visualKey;
+        render();
+      }
+    }
+  }, 25);
 
   process.stdout.on("resize", render);
 
@@ -111,6 +131,29 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     }
+    case "m":
+      // Toggle money mode
+      if (state.moneyMode === "play") {
+        state.moneyMode = "real";
+        state.balance = 0;
+        state.message = "Switched to Real Money mode";
+      } else {
+        state.moneyMode = "play";
+        state.balance = 1000;
+        state.message = "Switched to Play Money mode";
+      }
+      break;
+    case "r":
+      if (state.moneyMode === "play") {
+        state.balance = 1000;
+        state.message = "Balance reset to $1,000";
+      }
+      break;
+    case "d":
+      if (state.moneyMode === "real") {
+        state.message = "Deposits coming soon!";
+      }
+      break;
     case "q":
       exit();
       break;

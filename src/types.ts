@@ -6,10 +6,14 @@ export type MenuItem = {
   label: string;
 };
 
+export type MoneyMode = "play" | "real";
+
 export interface AppState {
   screen: Screen;
   balance: number;
+  moneyMode: MoneyMode;
   menuCursor: number;
+  menuAnimFrame: number;
   message: string;
   messageTimeout: ReturnType<typeof setTimeout> | null;
   roulette: RouletteState;

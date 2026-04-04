@@ -320,14 +320,14 @@ function renderBoard(state: AppState, width: number): string[] {
 
     if (isCursor && bet) {
       const cc = chipColor(bet);
-      return `${cc}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
+      return `${cc}${CHIP}${t.reset} ${t.white}${t.bold}${marker}${t.reset}`;
     }
     if (isCursor) {
-      return `${t.yellow}${t.bold}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
+      return `${t.yellow}${t.bold}${CHIP}${t.reset} ${t.white}${t.bold}${marker}${t.reset}`;
     }
     if (bet) {
       const cc = chipColor(bet);
-      return `${cc}${CHIP}${t.reset} ${t.white}${marker}${t.reset}`;
+      return `${cc}${CHIP}${t.reset} ${t.white}${t.bold}${marker}${t.reset}`;
     }
     return spc(GUTTER_W);
   }
@@ -615,7 +615,7 @@ function renderZeroCell(w: number, isCursor: boolean, betAmount: number | null, 
   if (betAmount) {
     const cc = chipColor(betAmount);
     const left = Math.ceil((w - 1) / 2);
-    return `${d}${spc(left)}${t.green}${t.bold}0${t.reset} ${cc}${CHIP}${t.reset}${spc(w - left - 3)}`;
+    return `${d}${spc(left)}${t.brightGreen}${t.bold}0${t.reset} ${cc}${CHIP}${t.reset}${spc(w - left - 3)}`;
   }
   return `${d}${t.green}${t.bold}${centerZero("0", w)}${t.reset}`;
 }
@@ -625,7 +625,7 @@ function renderNumberCell(
   isCursor: boolean, isSpinHL: boolean, betAmount: number | null,
 ): string {
   const numStr = String(num).padStart(2, " ");
-  const fgColor = color === "red" ? t.red : t.white;
+  const fgColor = color === "red" ? t.brightRed : t.brightWhite;
   const chipRight = (num - 1) % 3 !== 2; // right col → chip left, others → chip right
 
   if (isCursor) {
@@ -640,7 +640,7 @@ function renderNumberCell(
     const cc = chipColor(betAmount);
     return labelWithChip(`${fgColor}${t.bold}`, numStr, cc, w, chipRight);
   }
-  return `${fgColor}${centerText(numStr, w)}${t.reset}`;
+  return `${fgColor}${t.bold}${centerText(numStr, w)}${t.reset}`;
 }
 
 function renderLabelCell(
@@ -652,11 +652,11 @@ function renderLabelCell(
   }
   if (betAmount) {
     const cc = chipColor(betAmount);
-    const lc = labelColor || t.white;
+    const lc = labelColor || t.brightWhite;
     return labelWithChip(`${lc}${t.bold}`, label, `${cc}`, w, true);
   }
   const lc = labelColor || t.gray;
-  return `${lc}${centerText(label, w)}${t.reset}`;
+  return `${lc}${t.bold}${centerText(label, w)}${t.reset}`;
 }
 
 // dozenLine: 0-6 sequential line within the dozen group (content=0,2,4,6 border=1,3,5)
@@ -672,15 +672,11 @@ function renderDozenContent(
   // Line 3: label
   if (dozenLine === 3) {
     if (isCursor) return `${t.yellow}${t.bold}${centerText(label, w)}${t.reset}`;
-    if (bet) return `${t.white}${t.bold}${centerText(label, w)}${t.reset}`;
-    return `${t.gray}${centerText(label, w)}${t.reset}`;
+    if (bet) return `${t.brightWhite}${t.bold}${centerText(label, w)}${t.reset}`;
+    return `${t.gray}${t.bold}${centerText(label, w)}${t.reset}`;
   }
-  // Line 4: empty (was (2:1))
+  // Line 4: chip
   if (dozenLine === 4) {
-    return spc(w);
-  }
-  // Line 5: chip
-  if (dozenLine === 5) {
     if (isCursor && bet) {
       const cc = chipColor(bet);
       return centerWithAnsi(`${cc}${CHIP}`, CHIP, w);
@@ -690,6 +686,10 @@ function renderDozenContent(
       const cc = chipColor(bet);
       return centerWithAnsi(`${cc}${CHIP}`, CHIP, w);
     }
+    return spc(w);
+  }
+  // Line 5: empty
+  if (dozenLine === 5) {
     return spc(w);
   }
   // Lines 3-6: empty
