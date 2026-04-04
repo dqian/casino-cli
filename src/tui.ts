@@ -1,4 +1,4 @@
-import type { AppState, RouletteState, BlackjackState, PaiGowState, GameOptions, GameModule } from "./types";
+import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, GameOptions, GameModule } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
@@ -11,6 +11,9 @@ import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer"
 import { handlePaiGowKey } from "./paigow/handler";
 import { renderPaiGowScreen, renderPaiGowHotkeys } from "./paigow/renderer";
 import { createPaiGowState, newRound as newPaiGowRound } from "./paigow/game";
+import { handleCrapsKey } from "./craps/handler";
+import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
+import { createCrapsState } from "./craps/game";
 
 // --- Game registry ---
 
@@ -29,6 +32,11 @@ export const GAMES: Record<string, GameModule> = {
     handleKey: handlePaiGowKey,
     render: renderPaiGowScreen,
     renderHotkeys: renderPaiGowHotkeys,
+  },
+  craps: {
+    handleKey: handleCrapsKey,
+    render: renderCrapsScreen,
+    renderHotkeys: renderCrapsHotkeys,
   },
 };
 
@@ -107,6 +115,7 @@ function createState(): AppState {
     roulette: createRouletteState(options),
     blackjack: createBlackjackState(options),
     paigow: createPaiGowState(options),
+    craps: createCrapsState(),
     options,
     optionsCursor: 0,
   };
@@ -218,6 +227,8 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.paigow.sortMode = state.options.paigow.defaultSort;
           state.paigow.coloredSuits = state.options.paigow.coloredSuits;
           newPaiGowRound(state);
+        } else if (item.screen === "craps") {
+          state.craps = createCrapsState();
         }
         state.message = "";
       } else {

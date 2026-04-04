@@ -8,11 +8,11 @@ export const MENU_ITEMS: MenuItem[] = [
   { name: "Blackjack", screen: "blackjack", label: "2-Deck, 3:2" },
   { name: "Pai Gow Poker", screen: "paigow", label: "53-Card, House Way" },
   { name: "Baccarat", screen: null, label: "Coming Soon" },
-  { name: "Craps", screen: null, label: "Coming Soon" },
+  { name: "Craps", screen: "craps", label: "Standard Casino" },
 ];
 
 export function renderScreen(state: AppState): void {
-  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow") {
+  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow" || state.screen === "craps") {
     renderGameScreen(state);
     return;
   }

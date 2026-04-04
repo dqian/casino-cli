@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "options";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options";
 
 export type MenuItem = {
   name: string;
@@ -33,6 +33,7 @@ export interface AppState {
   roulette: RouletteState;
   blackjack: BlackjackState;
   paigow: PaiGowState;
+  craps: CrapsState;
   options: GameOptions;
   optionsCursor: number;
 }
@@ -177,6 +178,44 @@ export interface PaiGowState {
   coloredSuits: boolean;
   spreadFrame: number;          // 0 = no anim, >0 = spreading cards
   sortFrame: number;            // 0 = no anim, >0 = sort animation
+}
+
+// Craps types
+export type CrapsPhase = "betting" | "rolling" | "result";
+
+export type CrapsBetKind =
+  | "pass"
+  | "dontPass"
+  | "come"
+  | "dontCome"
+  | "field"
+  | "place4"
+  | "place5"
+  | "place6"
+  | "place8"
+  | "place9"
+  | "place10";
+
+export interface CrapsBet {
+  kind: CrapsBetKind;
+  amount: number;
+  point?: number; // for come/don't come bets that have established a point
+}
+
+export interface CrapsState {
+  phase: CrapsPhase;
+  point: number | null;          // null = come-out roll, number = point phase
+  bets: CrapsBet[];
+  betAmount: number;             // current chip size
+  cursorPos: number;             // index into bet positions array
+  dice: [number, number];        // current dice values
+  rollHistory: number[];         // last N roll sums
+  rollFrame: number;             // animation frame counter
+  rollTarget: [number, number];  // final dice values
+  winAmount: number;             // amount won on last roll
+  lossAmount: number;            // amount lost on last roll
+  message: string;               // roll result message
+  skipAnim: boolean;             // user pressed Enter to skip animation
 }
 
 // Game module interface — each game implements this for TUI dispatch
