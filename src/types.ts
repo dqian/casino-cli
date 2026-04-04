@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options" | "login" | "deposit" | "withdraw";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "baccarat" | "options" | "login" | "deposit" | "withdraw";
 
 export type MenuItem = {
   name: string;
@@ -19,6 +19,9 @@ export interface GameOptions {
   paigow: {
     defaultSort: PaiGowSortMode;
     coloredSuits: boolean;
+  };
+  baccarat: {
+    numDecks: number;
   };
 }
 
@@ -82,6 +85,7 @@ export interface AppState {
   blackjack: BlackjackState;
   paigow: PaiGowState;
   craps: CrapsState;
+  baccarat: BaccaratState;
   options: GameOptions;
   optionsCursor: number;
   auth: AuthState;
@@ -282,6 +286,29 @@ export interface CrapsState {
   lossAmount: number;            // amount lost on last roll
   message: string;               // roll result message
   skipAnim: boolean;             // user pressed Enter to skip animation
+}
+
+// Baccarat types
+export type BaccaratPhase = 'betting' | 'dealing' | 'result';
+export type BaccaratBetType = 'player' | 'banker' | 'tie';
+
+export interface BaccaratState {
+  phase: BaccaratPhase;
+  shoe: Card[];
+  cutCard: number;
+  numDecks: number;
+  playerCards: Card[];
+  bankerCards: Card[];
+  betAmount: number;
+  betType: BaccaratBetType;
+  winAmount: number;
+  resultMessage: string;
+  cardAnim: BaccaratCardAnim | null;
+}
+
+export interface BaccaratCardAnim {
+  target: 'player' | 'banker';
+  frame: number;
 }
 
 // Game module interface — each game implements this for TUI dispatch
