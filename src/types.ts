@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack";
+export type Screen = "menu" | "roulette" | "blackjack" | "options";
 
 export type MenuItem = {
   name: string;
@@ -7,6 +7,16 @@ export type MenuItem = {
 };
 
 export type MoneyMode = "play" | "real";
+
+export interface GameOptions {
+  roulette: {
+    defaultWheelMode: WheelMode;
+    tableMax: number | null; // null = no limit
+  };
+  blackjack: {
+    numDecks: number;
+  };
+}
 
 export interface AppState {
   screen: Screen;
@@ -18,6 +28,8 @@ export interface AppState {
   messageTimeout: ReturnType<typeof setTimeout> | null;
   roulette: RouletteState;
   blackjack: BlackjackState;
+  options: GameOptions;
+  optionsCursor: number;
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result";
@@ -89,12 +101,13 @@ export interface BlackjackHand {
   result: HandResult | null;
 }
 
-export type BlackjackPhase = 'betting' | 'playing' | 'dealer' | 'result';
+export type BlackjackPhase = 'betting' | 'insurance' | 'playing' | 'dealer' | 'result';
 
 export interface BlackjackState {
   phase: BlackjackPhase;
   shoe: Card[];
   cutCard: number;              // cards remaining when cut card is hit
+  numDecks: number;             // deck count used for current shoe
   playerHands: BlackjackHand[];
   activeHand: number;
   dealerCards: Card[];
@@ -102,6 +115,10 @@ export interface BlackjackState {
   betAmount: number;
   winAmount: number;
   cardAnim: CardAnim | null;  // slide-in animation for any card
+  showHint: boolean;
+  showCount: boolean;
+  runningCount: number;         // Hi-Lo running count
+  insuranceBet: number;         // 0 = no insurance taken
 }
 
 export interface CardAnim {

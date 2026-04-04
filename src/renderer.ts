@@ -15,6 +15,10 @@ export function renderScreen(state: AppState): void {
     renderGameScreen(state);
     return;
   }
+  if (state.screen === "options") {
+    renderOptionsScreen(state);
+    return;
+  }
   renderMenuScreen(state);
 }
 
@@ -94,16 +98,19 @@ function renderMenuScreen(state: AppState): void {
     const item = MENU_ITEMS[i]!;
     const selected = i === state.menuCursor;
     const available = item.screen !== null;
+    const label = item.screen === "blackjack"
+      ? `${state.options.blackjack.numDecks}-Deck, 3:2`
+      : item.label;
 
     let line: string;
     if (selected && available) {
-      line = `${t.cyan}${t.bold}  ${cursor} ${item.name}${t.reset}  ${t.gray}${item.label}${t.reset}`;
+      line = `${t.cyan}${t.bold}  ${cursor} ${item.name}${t.reset}  ${t.gray}${label}${t.reset}`;
     } else if (selected && !available) {
-      line = `${t.gray}  ${cursor} ${item.name}  ${t.dim}${item.label}${t.reset}`;
+      line = `${t.gray}  ${cursor} ${item.name}  ${t.dim}${label}${t.reset}`;
     } else if (!available) {
-      line = `${t.gray}${t.dim}    ${item.name}  ${item.label}${t.reset}`;
+      line = `${t.gray}${t.dim}    ${item.name}  ${label}${t.reset}`;
     } else {
-      line = `${t.white}    ${item.name}${t.reset}  ${t.gray}${item.label}${t.reset}`;
+      line = `${t.white}    ${item.name}${t.reset}  ${t.gray}${label}${t.reset}`;
     }
     const menuIndent = Math.max(4, Math.floor((width - 48) / 2));
     lines.push(" ".repeat(menuIndent) + "    " + line);
@@ -118,6 +125,7 @@ function renderMenuScreen(state: AppState): void {
   const menuKeys: { key: string; label: string }[] = [
     { key: "↑↓", label: "Select" },
     { key: "Enter", label: "Play" },
+    { key: "o", label: "Options" },
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"
       ? [{ key: "r", label: "Reset balance" }]
@@ -168,6 +176,50 @@ function renderGameScreen(state: AppState): void {
   // Trim to terminal height
   while (lines.length < height) lines.push("");
 
+  writeLines(lines, height);
+}
+
+function renderOptionsScreen(state: AppState): void {
+  const { columns: width, rows: height } = process.stdout;
+  const lines: string[] = [];
+  const opts = state.options;
+  const cur = state.optionsCursor;
+
+  // Header
+  lines.push(`  ${t.bold}${t.yellow}OPTIONS${t.reset}`);
+  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+  lines.push("");
+
+  const labelW = 20;
+
+  function optRow(idx: number, label: string, value: string): string {
+    const sel = idx === cur;
+    const arrow = sel ? `${t.yellow}${t.bold}` : `${t.gray}`;
+    const lbl = sel ? `${t.white}${t.bold}${label.padEnd(labelW)}${t.reset}` : `${t.gray}${label.padEnd(labelW)}${t.reset}`;
+    return `  ${sel ? `${t.yellow}${t.bold}►${t.reset} ` : "  "}${lbl}${arrow}◄${t.reset} ${t.brightWhite}${t.bold}${value}${t.reset} ${arrow}►${t.reset}`;
+  }
+
+  // Roulette section
+  lines.push(`  ${t.cyan}${t.bold}ROULETTE${t.reset}`);
+  lines.push(optRow(0, "Wheel Mode", opts.roulette.defaultWheelMode === "ball" ? "Ball" : "Arrow"));
+  const maxLabel = opts.roulette.tableMax === null ? "None" : `$${opts.roulette.tableMax.toLocaleString()}`;
+  lines.push(optRow(1, "Table Maximum", maxLabel));
+  lines.push("");
+
+  // Blackjack section
+  lines.push(`  ${t.cyan}${t.bold}BLACKJACK${t.reset}`);
+  lines.push(optRow(2, "Number of Decks", `${opts.blackjack.numDecks}`));
+  lines.push("");
+
+  // Fill
+  while (lines.length < height - 4) lines.push("");
+
+  // Hotkeys
+  lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
+  const hotkeyLine = `  ${t.white}${t.bold}↑↓${t.reset}  ${t.gray}Navigate${t.reset}  ${t.white}${t.bold}◄►${t.reset}  ${t.gray}Adjust${t.reset}  ${t.white}${t.bold}q${t.reset}  ${t.gray}Back${t.reset}`;
+  lines.push(hotkeyLine);
+
+  while (lines.length < height) lines.push("");
   writeLines(lines, height);
 }
 

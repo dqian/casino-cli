@@ -9,6 +9,16 @@ export function placeBet(state: AppState): void {
     return;
   }
 
+  // Table maximum check
+  const tableMax = state.options.roulette.tableMax;
+  if (tableMax !== null) {
+    const currentTotal = rs.bets.reduce((s, b) => s + b.amount, 0);
+    if (currentTotal + amount > tableMax) {
+      state.message = `Table max $${tableMax.toLocaleString()}!`;
+      return;
+    }
+  }
+
   const betType = cursorToBet(rs);
   if (!betType) return;
 

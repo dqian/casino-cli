@@ -1,9 +1,13 @@
-import type { AppState } from "../types";
-import { createShoe, drawCard, handValue, isBlackjack, isBusted } from "./deck";
+import type { AppState, Card } from "../types";
+import { createShoe, drawCard, handValue, isBlackjack, isBusted, hiLoValue } from "./deck";
 
 // Staged cards for deal animation — cards are drawn upfront,
 // then added to hands one at a time as the animation plays
-let dealStage: { p1: import("../types").Card; d1: import("../types").Card; p2: import("../types").Card; d2: import("../types").Card } | null = null;
+let dealStage: { p1: Card; d1: Card; p2: Card; d2: Card } | null = null;
+
+function countCard(state: AppState, card: Card): void {
+  state.blackjack.runningCount += hiLoValue(card);
+}
 
 export function deal(state: AppState): void {
   const bj = state.blackjack;
@@ -15,8 +19,12 @@ export function deal(state: AppState): void {
 
   // Auto-shuffle when past the cut card
   if (bj.shoe.length <= bj.cutCard) {
-    bj.shoe = createShoe(2);
-    bj.cutCard = 10 + Math.floor(Math.random() * 31);
+    const nd = state.options.blackjack.numDecks;
+    bj.shoe = createShoe(nd);
+    bj.numDecks = nd;
+    const base = nd * 5;
+    bj.cutCard = base + Math.floor(Math.random() * (nd * 15 + 1));
+    bj.runningCount = 0;
     state.message = "Shoe reshuffled!";
   }
 
@@ -43,7 +51,36 @@ export function deal(state: AppState): void {
   bj.dealerRevealed = false;
   bj.winAmount = 0;
   bj.cardAnim = null;
+  bj.insuranceBet = 0;
   state.message = "";
+}
+
+function checkInsurance(state: AppState): boolean {
+  const bj = state.blackjack;
+  if (bj.dealerCards[0]?.rank !== 'A') return false;
+  const cost = Math.floor(bj.betAmount / 2);
+  if (cost > state.balance) return false;
+  bj.phase = "insurance";
+  return true;
+}
+
+export function takeInsurance(state: AppState): void {
+  const bj = state.blackjack;
+  const cost = Math.floor(bj.betAmount / 2);
+  if (cost > state.balance) {
+    state.message = "Not enough balance!";
+    bj.insuranceBet = 0;
+    finishDeal(state);
+    return;
+  }
+  state.balance -= cost;
+  bj.insuranceBet = cost;
+  finishDeal(state);
+}
+
+export function declineInsurance(state: AppState): void {
+  state.blackjack.insuranceBet = 0;
+  finishDeal(state);
 }
 
 function finishDeal(state: AppState): void {
@@ -52,28 +89,41 @@ function finishDeal(state: AppState): void {
   const playerBj = isBlackjack(cards);
   const dealerBj = isBlackjack(bj.dealerCards);
 
+  // Resolve insurance side bet
+  let insuranceMsg = "";
+  if (bj.insuranceBet > 0) {
+    if (dealerBj) {
+      state.balance += bj.insuranceBet * 3; // return + 2:1
+      insuranceMsg = ` Insurance +$${bj.insuranceBet * 2}`;
+    } else {
+      insuranceMsg = ` Insurance lost`;
+    }
+  }
+
   if (playerBj || dealerBj) {
     bj.dealerRevealed = true;
+    countCard(state, bj.dealerCards[1]!);
     if (playerBj && dealerBj) {
       bj.playerHands[0]!.result = "push";
       state.balance += bj.betAmount;
       bj.winAmount = 0;
-      state.message = "Both blackjack — Push!";
+      state.message = "Both blackjack — Push!" + insuranceMsg;
     } else if (playerBj) {
       const payout = Math.floor(bj.betAmount * 1.5);
       bj.playerHands[0]!.result = "blackjack";
       state.balance += bj.betAmount + payout;
       bj.winAmount = payout;
-      state.message = "Blackjack! 3:2";
+      state.message = "Blackjack! 3:2" + insuranceMsg;
     } else {
       bj.playerHands[0]!.result = "lose";
       bj.winAmount = -bj.betAmount;
-      state.message = "Dealer blackjack!";
+      state.message = "Dealer blackjack!" + insuranceMsg;
     }
     bj.phase = "result";
     return;
   }
 
+  if (insuranceMsg) state.message = insuranceMsg.trim();
   bj.phase = "playing";
 }
 
@@ -84,7 +134,9 @@ export function hit(state: AppState): void {
   const hand = bj.playerHands[bj.activeHand];
   if (!hand || hand.stood) return;
 
-  hand.cards.push(drawCard(bj.shoe));
+  const card = drawCard(bj.shoe);
+  hand.cards.push(card);
+  countCard(state, card);
 }
 
 export function resolveHit(state: AppState): void {
@@ -127,7 +179,9 @@ export function doubleDown(state: AppState): void {
   state.balance -= hand.bet;
   hand.bet *= 2;
   hand.doubled = true;
-  hand.cards.push(drawCard(bj.shoe));
+  const card = drawCard(bj.shoe);
+  hand.cards.push(card);
+  countCard(state, card);
   hand.stood = true;
 }
 
@@ -162,9 +216,14 @@ export function split(state: AppState): void {
 
   state.balance -= hand.bet;
 
-  hand.cards = [c1, drawCard(bj.shoe)];
+  const draw1 = drawCard(bj.shoe);
+  const draw2 = drawCard(bj.shoe);
+  countCard(state, draw1);
+  countCard(state, draw2);
+
+  hand.cards = [c1, draw1];
   const newHand = {
-    cards: [c2, drawCard(bj.shoe)] as typeof hand.cards,
+    cards: [c2, draw2] as typeof hand.cards,
     bet: hand.bet,
     doubled: false,
     stood: false,
@@ -197,6 +256,7 @@ function advanceHand(state: AppState): void {
   const allBusted = bj.playerHands.every(h => h.result === "bust");
   if (allBusted) {
     bj.dealerRevealed = true;
+    countCard(state, bj.dealerCards[1]!);
     bj.phase = "result";
     const totalBet = bj.playerHands.reduce((s, h) => s + h.bet, 0);
     bj.winAmount = -totalBet;
@@ -206,6 +266,7 @@ function advanceHand(state: AppState): void {
 
   bj.phase = "dealer";
   bj.dealerRevealed = true;
+  countCard(state, bj.dealerCards[1]!);
 }
 
 export function dealerPlay(state: AppState, render: () => void): void {
@@ -215,7 +276,9 @@ export function dealerPlay(state: AppState, render: () => void): void {
   const { value } = handValue(bj.dealerCards);
 
   if (value < 17) {
-    bj.dealerCards.push(drawCard(bj.shoe));
+    const card = drawCard(bj.shoe);
+    bj.dealerCards.push(card);
+    countCard(state, card);
     animateCard(state, render, 'dealer', () => {
       if (bj.phase !== "dealer") return; // skipped
       dealerPlay(state, render);
@@ -233,7 +296,9 @@ export function skipDealer(state: AppState): void {
   bj.cardAnim = null;
 
   while (handValue(bj.dealerCards).value < 17) {
-    bj.dealerCards.push(drawCard(bj.shoe));
+    const card = drawCard(bj.shoe);
+    bj.dealerCards.push(card);
+    countCard(state, card);
   }
   resolveAllHands(state);
   bj.phase = "result";
@@ -289,6 +354,7 @@ export function newBjRound(state: AppState): void {
   state.blackjack.activeHand = 0;
   state.blackjack.winAmount = 0;
   state.blackjack.cardAnim = null;
+  state.blackjack.insuranceBet = 0;
   state.message = "";
 }
 
@@ -366,17 +432,23 @@ export function startDealAnimation(state: AppState, render: () => void): void {
 
   // Step 1: player card 1
   bj.playerHands[0]!.cards.push(stage.p1);
+  countCard(state, stage.p1);
   animateCard(state, render, 'player', () => {
     // Step 2: dealer card 1
     bj.dealerCards.push(stage.d1);
+    countCard(state, stage.d1);
     animateCard(state, render, 'dealer', () => {
       // Step 3: player card 2
       bj.playerHands[0]!.cards.push(stage.p2);
+      countCard(state, stage.p2);
       animateCard(state, render, 'player', () => {
-        // Step 4: dealer card 2
+        // Step 4: dealer card 2 (face down — don't count yet)
         bj.dealerCards.push(stage.d2);
         animateCard(state, render, 'dealer', () => {
-          finishDeal(state);
+          // Check if insurance should be offered
+          if (!checkInsurance(state)) {
+            finishDeal(state);
+          }
           render();
         });
       });

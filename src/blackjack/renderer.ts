@@ -1,7 +1,8 @@
 import type { AppState, Card, Rank } from "../types";
 import * as t from "../theme";
-import { handValue, isBlackjack } from "./deck";
+import { handValue, isBlackjack, hiLoValue } from "./deck";
 import { canSplit, canDouble } from "./game";
+import { getBasicStrategyHint } from "./strategy";
 
 const CARD_H = 9;
 const INNER_W = 9;
@@ -234,6 +235,25 @@ function sliceAnsi(str: string, start: number, end: number): string {
   return result;
 }
 
+function renderCardCountLine(cards: Card[], faceDownIndices: number[]): string {
+  let line = "";
+  for (let i = 0; i < cards.length; i++) {
+    if (i > 0) line += " ";
+    if (faceDownIndices.includes(i)) {
+      line += " ".repeat(11);
+    } else {
+      const val = hiLoValue(cards[i]!);
+      const label = val > 0 ? `+${val}` : val === 0 ? "0" : `${val}`;
+      const clr = val > 0 ? t.green : val < 0 ? t.red : t.white;
+      const visLen = label.length;
+      const padL = Math.floor((11 - visLen) / 2);
+      const padR = 11 - visLen - padL;
+      line += " ".repeat(padL) + `${clr}${label}${t.reset}` + " ".repeat(padR);
+    }
+  }
+  return line;
+}
+
 // --- Main screen renderer ---
 
 export function renderBlackjackScreen(state: AppState): string[] {
@@ -248,7 +268,7 @@ export function renderBlackjackScreen(state: AppState): string[] {
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
 
   // Shoe bar — depleting bar with yellow cut card, stretches full width
-  const totalShoe = 104; // 2 decks
+  const totalShoe = bj.numDecks * 52;
   const leftLabel = "  Shoe ";
   const rightLabel = ` ${bj.shoe.length}/${totalShoe}  `;
   const barMax = Math.max(10, width - leftLabel.length - rightLabel.length);
@@ -266,8 +286,17 @@ export function renderBlackjackScreen(state: AppState): string[] {
   }
   lines.push(`${t.gray}${leftLabel}${t.reset}${bar}${t.gray}${rightLabel}${t.reset}`);
 
-  // Bet line
-  lines.push("");
+  // Count line or empty space between shoe and bet
+  if (bj.showCount) {
+    const rc = bj.runningCount;
+    const rcStr = rc >= 0 ? `+${rc}` : `${rc}`;
+    const decksLeft = Math.max(1, bj.shoe.length / 52);
+    const tc = rc / decksLeft;
+    const tcStr = (tc >= 0 ? "+" : "") + tc.toFixed(1);
+    lines.push(`  ${t.gray}Count: ${t.reset}${t.brightWhite}${t.bold}${rcStr}${t.reset}  ${t.gray}True: ${t.reset}${t.brightWhite}${t.bold}${tcStr}${t.reset}`);
+  } else {
+    lines.push("");
+  }
   lines.push(`  ${t.gray}Bet: ${t.reset}${t.brightWhite}${t.bold}$${bj.betAmount}${t.reset}`);
 
   lines.push("");
@@ -317,13 +346,19 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
     const dealerPh = dealerSettled < 2 ? 2 : 0;
     const dealerCardLines = renderHandCards(bj.dealerCards, faceDown, dealerPh, dealerOffset);
     for (const line of dealerCardLines) lines.push(`${pad}${line}`);
+    if (bj.showCount && bj.dealerCards.length > 0) {
+      lines.push(`${pad}${renderCardCountLine(bj.dealerCards, faceDown)}`);
+      lines.push("");
+    } else {
+      lines.push("");
+      lines.push("");
+    }
   } else {
     const ph = renderPlaceholderHand();
     for (const line of ph) lines.push(`${pad}${line}`);
+    lines.push("");
+    lines.push("");
   }
-
-  lines.push("");
-  lines.push("");
 
   // Player hands
   if (hasCards) {
@@ -357,12 +392,22 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
           case "bust":      infoLine += `${t.red}BUST${t.reset}`; break;
         }
       }
+      // Hint display
+      if (bj.showHint && isActive && bj.phase === "playing" && hand.cards.length >= 2 && bj.dealerCards.length > 0) {
+        const canSp = canSplit(state);
+        const canDb = canDouble(state);
+        const hint = getBasicStrategyHint(hand.cards, bj.dealerCards[0]!, canSp, canDb);
+        infoLine += `  ${t.cyan}${t.bold}${hint}${t.reset}`;
+      }
       lines.push(`${pad}${infoLine}`);
       const handOffset = (isActive || !multi) ? playerOffset : 0;
       const playerSettled = handOffset > 0 ? hand.cards.length - 1 : hand.cards.length;
       const playerPh = playerSettled < 2 ? 2 : 0;
       const cardLines = renderHandCards(hand.cards, [], playerPh, handOffset);
       for (const line of cardLines) lines.push(`${pad}${line}`);
+      if (bj.showCount && hand.cards.length > 0) {
+        lines.push(`${pad}${renderCardCountLine(hand.cards, [])}`);
+      }
       if (h < bj.playerHands.length - 1) lines.push("");
     }
   } else {
@@ -372,10 +417,11 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
     for (const line of ph) lines.push(`${pad}${line}`);
   }
 
-  lines.push("");
+  if (!(bj.showCount && hasCards)) lines.push("");
 
   // Status line
   if (bj.phase === "result" && !bj.cardAnim) {
+    lines.push("");
     if (bj.winAmount > 0) {
       lines.push(`${pad}${t.green}${t.bold}+$${bj.winAmount}${t.reset}`);
     } else if (bj.winAmount < 0) {
@@ -383,6 +429,13 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
     } else {
       lines.push(`${pad}${t.yellow}$0${t.reset}`);
     }
+  } else if (bj.phase === "insurance") {
+    const cost = Math.floor(bj.betAmount / 2);
+    let insuranceLine = `${pad}${t.yellow}Insurance? ${t.reset}${t.brightWhite}${t.bold}$${cost}${t.reset}  ${t.gray}(y/n)${t.reset}`;
+    if (bj.showHint) {
+      insuranceLine += `  ${t.cyan}${t.bold}No${t.reset}`;
+    }
+    lines.push(insuranceLine);
   } else if (bj.phase === "dealer") {
     lines.push(`${pad}${t.yellow}Dealer draws...${t.reset}`);
   } else if (state.message) {
@@ -394,56 +447,89 @@ function renderTable(lines: string[], state: AppState, pad: string, hasCards: bo
 
 export function renderBjHotkeyGrid(width: number, state: AppState): string[] {
   const bj = state.blackjack;
-  let keys: { key: string; label: string }[];
+  type HK = { key: string; label: string };
+  let left: HK[] = [];
+  let right: HK[] = [];
 
   switch (bj.phase) {
     case "betting":
-      keys = [
+      left = [
         { key: "↑↓", label: "Bet size" },
         { key: "Enter", label: "Deal" },
+      ];
+      right = [
+        { key: "h", label: bj.showHint ? "Hide hint" : "Show hint" },
+        { key: "c", label: bj.showCount ? "Hide count" : "Show count" },
         { key: "q", label: "Menu" },
       ];
       break;
+    case "insurance":
+      left = [
+        { key: "y", label: "Insurance" },
+        { key: "n", label: "No insurance" },
+      ];
+      right = [{ key: "q", label: "Menu" }];
+      break;
     case "playing": {
-      keys = [
+      left = [
         { key: "Enter", label: "Hit" },
         { key: "s", label: "Stand" },
       ];
-      if (canDouble(state)) keys.push({ key: "d", label: "Double" });
-      if (canSplit(state)) keys.push({ key: "p", label: "Split" });
-      break;
-    }
-    case "dealer":
-      keys = [{ key: "Enter", label: "Skip" }];
-      break;
-    case "result":
-      keys = [
-        { key: "Enter", label: "New round" },
+      if (canDouble(state)) left.push({ key: "d", label: "Double" });
+      if (canSplit(state)) left.push({ key: "p", label: "Split" });
+      right = [
+        { key: "h", label: bj.showHint ? "Hide hint" : "Show hint" },
+        { key: "c", label: bj.showCount ? "Hide count" : "Show count" },
         { key: "q", label: "Menu" },
       ];
       break;
-    default:
-      keys = [];
+    }
+    case "dealer":
+      left = [{ key: "Enter", label: "Skip" }];
+      right = [{ key: "q", label: "Menu" }];
+      break;
+    case "result":
+      left = [{ key: "Enter", label: "New round" }];
+      right = [
+        { key: "h", label: bj.showHint ? "Hide hint" : "Show hint" },
+        { key: "c", label: bj.showCount ? "Hide count" : "Show count" },
+        { key: "q", label: "Menu" },
+      ];
+      break;
   }
 
-  if (keys.length === 0) return [""];
+  const all = [...left, ...right];
+  if (all.length === 0) return [""];
 
-  const maxKey = Math.max(...keys.map(h => h.key.length));
-  const maxLabel = Math.max(...keys.map(h => h.label.length));
-  const cellW = maxKey + 2 + maxLabel + 2;
-  const cols = Math.max(1, Math.floor((width - 4) / cellW));
-  const rows = Math.ceil(keys.length / cols);
+  function renderCell(h: HK, maxK: number, maxL: number): string {
+    return `${t.white}${t.bold}${h.key.padStart(maxK)}${t.reset}  ${t.gray}${h.label.padEnd(maxL)}${t.reset}`;
+  }
+
+  // Render left group flush-left, right group flush-right
+  const maxRows = Math.max(left.length, right.length);
+  const lMaxK = left.length > 0 ? Math.max(...left.map(h => h.key.length)) : 0;
+  const lMaxL = left.length > 0 ? Math.max(...left.map(h => h.label.length)) : 0;
+  const rMaxK = right.length > 0 ? Math.max(...right.map(h => h.key.length)) : 0;
+  const rMaxL = right.length > 0 ? Math.max(...right.map(h => h.label.length)) : 0;
+  const rightColW = rMaxK + 2 + rMaxL;
+  const margin = 2; // left/right margin
 
   const gridLines: string[] = [];
-  for (let r = 0; r < rows; r++) {
-    let line = "  ";
-    for (let c = 0; c < cols; c++) {
-      const idx = r * cols + c;
-      if (idx >= keys.length) break;
-      const h = keys[idx]!;
-      line += `${t.white}${t.bold}${h.key.padStart(maxKey)}${t.reset}  ${t.gray}${h.label.padEnd(maxLabel)}${t.reset}  `;
+  for (let r = 0; r < maxRows; r++) {
+    let leftPart = "";
+    if (r < left.length) {
+      leftPart = renderCell(left[r]!, lMaxK, lMaxL);
     }
-    gridLines.push(line);
+    const leftVisLen = t.stripAnsi(leftPart).length;
+
+    let rightPart = "";
+    if (r < right.length) {
+      rightPart = renderCell(right[r]!, rMaxK, rMaxL);
+    }
+    const rightVisLen = t.stripAnsi(rightPart).length;
+
+    const gap = Math.max(2, width - margin * 2 - leftVisLen - rightVisLen);
+    gridLines.push(" ".repeat(margin) + leftPart + " ".repeat(gap) + rightPart);
   }
   return gridLines;
 }

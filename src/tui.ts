@@ -1,15 +1,22 @@
-import type { AppState, RouletteState, BlackjackState, CursorZone } from "./types";
+import type { AppState, RouletteState, BlackjackState, GameOptions, CursorZone } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
 import { placeBet, removeBet, clearBets, spin, newRound, totalBets } from "./roulette/game";
 import { VGRID_ROWS, VGRID_COLS } from "./roulette/board";
-import { deal, hit, resolveHit, stand, doubleDown, resolveDouble, split, dealerPlay, skipDealer, newBjRound, startDealAnimation, animateHit, animateDouble, skipCardAnim } from "./blackjack/game";
+import { deal, hit, resolveHit, stand, doubleDown, resolveDouble, split, dealerPlay, skipDealer, newBjRound, startDealAnimation, animateHit, animateDouble, skipCardAnim, takeInsurance, declineInsurance } from "./blackjack/game";
 import { createShoe } from "./blackjack/deck";
 
 const CHIP_SIZES = [1, 5, 10, 25, 50, 100, 500];
 
-function createRouletteState(): RouletteState {
+function createDefaultOptions(): GameOptions {
+  return {
+    roulette: { defaultWheelMode: "ball", tableMax: null },
+    blackjack: { numDecks: 2 },
+  };
+}
+
+function createRouletteState(options: GameOptions): RouletteState {
   return {
     phase: "betting",
     bets: [],
@@ -25,7 +32,7 @@ function createRouletteState(): RouletteState {
     winAmount: 0,
     spinHistory: [],
     showResultTimer: null,
-    wheelMode: "ball",
+    wheelMode: options.roulette.defaultWheelMode,
     ballRow: 0,
     ballCol: 0,
     ballY: 0,
@@ -35,15 +42,18 @@ function createRouletteState(): RouletteState {
   };
 }
 
-function randomCutCard(): number {
-  return 10 + Math.floor(Math.random() * 31); // 10-40
+function randomCutCard(numDecks: number): number {
+  const base = numDecks * 5;
+  return base + Math.floor(Math.random() * (numDecks * 15 + 1));
 }
 
-function createBlackjackState(): BlackjackState {
+function createBlackjackState(options: GameOptions): BlackjackState {
+  const nd = options.blackjack.numDecks;
   return {
     phase: "betting",
-    shoe: createShoe(2),
-    cutCard: randomCutCard(),
+    shoe: createShoe(nd),
+    cutCard: randomCutCard(nd),
+    numDecks: nd,
     playerHands: [],
     activeHand: 0,
     dealerCards: [],
@@ -51,10 +61,15 @@ function createBlackjackState(): BlackjackState {
     betAmount: 25,
     winAmount: 0,
     cardAnim: null,
+    showHint: false,
+    showCount: false,
+    runningCount: 0,
+    insuranceBet: 0,
   };
 }
 
 function createState(): AppState {
+  const options = createDefaultOptions();
   return {
     screen: "menu",
     balance: 1000,
@@ -63,8 +78,10 @@ function createState(): AppState {
     menuAnimFrame: 0,
     message: "",
     messageTimeout: null,
-    roulette: createRouletteState(),
-    blackjack: createBlackjackState(),
+    roulette: createRouletteState(options),
+    blackjack: createBlackjackState(options),
+    options,
+    optionsCursor: 0,
   };
 }
 
@@ -130,6 +147,8 @@ export function startTui(): void {
 
     if (state.screen === "menu") {
       handleMenuKey(state, key, exit);
+    } else if (state.screen === "options") {
+      handleOptionsKey(state, key);
     } else if (state.screen === "roulette") {
       handleRouletteKey(state, key, render);
     } else if (state.screen === "blackjack") {
@@ -155,8 +174,16 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       if (item.screen) {
         state.screen = item.screen;
         if (item.screen === "roulette") {
-          state.roulette = createRouletteState();
+          state.roulette = createRouletteState(state.options);
         } else if (item.screen === "blackjack") {
+          // Recreate shoe if deck count changed
+          const optDecks = state.options.blackjack.numDecks;
+          if (state.blackjack.numDecks !== optDecks) {
+            state.blackjack.shoe = createShoe(optDecks);
+            state.blackjack.numDecks = optDecks;
+            state.blackjack.cutCard = randomCutCard(optDecks);
+            state.blackjack.runningCount = 0;
+          }
           newBjRound(state);
         }
         state.message = "";
@@ -165,6 +192,11 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     }
+    case "o":
+      state.screen = "options";
+      state.optionsCursor = 0;
+      state.message = "";
+      break;
     case "m":
       // Toggle money mode
       if (state.moneyMode === "play") {
@@ -190,6 +222,56 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "q":
       exit();
+      break;
+  }
+}
+
+// --- Options ---
+
+const WHEEL_MODES = ["ball", "arrow"] as const;
+const TABLE_MAX_OPTIONS: (number | null)[] = [null, 100, 500, 1000, 5000, 10000];
+const DECK_OPTIONS = [1, 2, 4, 6, 8];
+
+function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): void {
+  const opts = state.options;
+  const total = 3; // 3 option rows
+
+  switch (key.name) {
+    case "up":
+      state.optionsCursor = Math.max(0, state.optionsCursor - 1);
+      break;
+    case "down":
+      state.optionsCursor = Math.min(total - 1, state.optionsCursor + 1);
+      break;
+    case "left":
+    case "right": {
+      const dir = key.name === "right" ? 1 : -1;
+      switch (state.optionsCursor) {
+        case 0: { // wheel mode
+          const idx = WHEEL_MODES.indexOf(opts.roulette.defaultWheelMode);
+          const next = (idx + dir + WHEEL_MODES.length) % WHEEL_MODES.length;
+          opts.roulette.defaultWheelMode = WHEEL_MODES[next]!;
+          break;
+        }
+        case 1: { // table max
+          const idx = TABLE_MAX_OPTIONS.indexOf(opts.roulette.tableMax);
+          const next = Math.max(0, Math.min(TABLE_MAX_OPTIONS.length - 1, idx + dir));
+          opts.roulette.tableMax = TABLE_MAX_OPTIONS[next]!;
+          break;
+        }
+        case 2: { // deck count
+          const idx = DECK_OPTIONS.indexOf(opts.blackjack.numDecks);
+          const next = Math.max(0, Math.min(DECK_OPTIONS.length - 1, idx + dir));
+          opts.blackjack.numDecks = DECK_OPTIONS[next]!;
+          break;
+        }
+      }
+      break;
+    }
+    case "q":
+    case "escape":
+      state.screen = "menu";
+      state.message = "";
       break;
   }
 }
@@ -288,6 +370,16 @@ function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, r
     return;
   }
 
+  // Insurance phase: y/n
+  if (bj.phase === "insurance") {
+    if (key.name === "y") {
+      takeInsurance(state);
+    } else if (key.name === "n") {
+      declineInsurance(state);
+    }
+    return;
+  }
+
   // Dealer phase: only Enter to skip
   if (bj.phase === "dealer") {
     if (key.name === "return") {
@@ -300,6 +392,10 @@ function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, r
   if (bj.phase === "result") {
     if (key.name === "return") {
       newBjRound(state);
+    } else if (key.name === "h") {
+      bj.showHint = !bj.showHint;
+    } else if (key.name === "c") {
+      bj.showCount = !bj.showCount;
     } else if (key.name === "q" || key.name === "escape") {
       state.screen = "menu";
       state.message = "";
@@ -331,6 +427,12 @@ function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, r
         }
         break;
       case "p": split(state); break;
+      case "h":
+        bj.showHint = !bj.showHint;
+        return;
+      case "c":
+        bj.showCount = !bj.showCount;
+        return;
       case "q":
       case "escape":
         state.screen = "menu";
@@ -346,6 +448,12 @@ function handleBlackjackKey(state: AppState, key: ReturnType<typeof parseKey>, r
     case "return":
       deal(state);
       startDealAnimation(state, render);
+      return;
+    case "h":
+      bj.showHint = !bj.showHint;
+      return;
+    case "c":
+      bj.showCount = !bj.showCount;
       return;
     case "up":
     case "right":

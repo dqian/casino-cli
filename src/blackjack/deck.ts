@@ -58,3 +58,10 @@ export function isBlackjack(cards: Card[]): boolean {
 export function isBusted(cards: Card[]): boolean {
   return handValue(cards).value > 21;
 }
+
+export function hiLoValue(card: Card): number {
+  const v = cardValue(card);
+  if (v >= 2 && v <= 6) return 1;   // 2-6: +1
+  if (v >= 10) return -1;           // 10,J,Q,K,A: -1
+  return 0;                         // 7-9: 0
+}
