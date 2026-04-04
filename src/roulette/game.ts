@@ -125,12 +125,12 @@ function animateSpin(
   // Check for skip (Enter during spin sets spinFrame high)
   if (state.roulette.spinFrame > totalFrames) frame = totalFrames + 1;
 
-  // Ball mode: if ball has settled, snap wheel to target immediately
+  // Ball mode: if ball has settled, determine winner from ball's position on wheel
   if (state.roulette.wheelMode === "ball" && !state.roulette.ballBouncing && frame > 30) {
-    const finalNum = WHEEL_ORDER[targetIdx] ?? 0;
-    state.roulette.spinHighlight = finalNum;
+    const winNum = ballLandingNumber(state.roulette);
+    state.roulette.spinHighlight = winNum;
     state.roulette.spinHalfStep = false;
-    finishSpin(state, render, finalNum);
+    finishSpin(state, render, winNum);
     return;
   }
 
@@ -140,10 +140,12 @@ function animateSpin(
     state.roulette.spinHalfStep = false;
 
     if (state.roulette.wheelMode === "ball" && state.roulette.ballBouncing) {
-      // Ball still bouncing — wait for it to settle, then finish
+      // Ball still bouncing — wait for it to settle, then determine winner
       const waitForBall = () => {
         if (!state.roulette.ballBouncing) {
-          finishSpin(state, render, finalNum);
+          const winNum = ballLandingNumber(state.roulette);
+          state.roulette.spinHighlight = winNum;
+          finishSpin(state, render, winNum);
           return;
         }
         setTimeout(waitForBall, 30);
@@ -255,6 +257,16 @@ function startBallPhysics(state: AppState, render: () => void): void {
     setTimeout(step, 20);
   };
   setTimeout(step, 20);
+}
+
+/** Determine winning number from where the ball landed on the current wheel display. */
+function ballLandingNumber(rs: AppState["roulette"]): number {
+  const currentIdx = WHEEL_ORDER.indexOf(rs.spinHighlight);
+  // Each wheel slot is 4 chars wide; ballCol is offset from center
+  const slotOffset = Math.round(rs.ballCol / 4);
+  const clamped = Math.max(-4, Math.min(4, slotOffset));
+  const winIdx = (currentIdx + clamped + WHEEL_ORDER.length) % WHEEL_ORDER.length;
+  return WHEEL_ORDER[winIdx] ?? 0;
 }
 
 function finishSpin(state: AppState, render: () => void, finalNum: number): void {
