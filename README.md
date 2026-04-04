@@ -10,16 +10,32 @@ Terminal-based casino games built with Bun + TypeScript. Zero external dependenc
 
 ## Quick Start
 
+Install [Bun](https://bun.sh) if you don't have it:
+
+```sh
+curl -fsSL https://bun.sh/install | bash
+```
+
+Clone the repo and install dependencies:
+
+```sh
+git clone https://github.com/dqian/casino-cli.git
+cd casino-cli
+bun i
+```
+
+Run:
+
 ```sh
 bun run src/index.ts
 ```
 
 ## Alias
 
-Add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
+For quick access, add this to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```sh
-alias casino='bun run ~/Documents/Repositories/casino-cli/src/index.ts'
+alias casino='bun run ~/casino-cli/src/index.ts'
 ```
 
 Then just run:
