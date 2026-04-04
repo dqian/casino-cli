@@ -295,6 +295,7 @@ export function newBjRound(state: AppState): void {
 const CARD_ANIM_FRAMES = 8;
 const CARD_ANIM_DELAY = 40;
 let animSkipped = false;
+let animGeneration = 0;
 
 function animateCard(
   state: AppState,
@@ -311,10 +312,14 @@ function animateCard(
     return;
   }
 
+  const gen = ++animGeneration;
   bj.cardAnim = { target, frame: 0 };
   render();
 
   const step = () => {
+    // Stale timer — this animation was already resolved
+    if (gen !== animGeneration) return;
+
     if (!bj.cardAnim || animSkipped) {
       bj.cardAnim = null;
       onDone();
@@ -335,6 +340,7 @@ function animateCard(
 
 export function skipCardAnim(state: AppState): void {
   animSkipped = true;
+  animGeneration++;
   state.blackjack.cardAnim = null;
 }
 
