@@ -2,7 +2,7 @@
 
 import type { AppState, PaiGowCard, Rank } from "../types";
 import * as t from "../theme";
-import { renderHeader, renderHotkeySplit } from "../shared/render";
+import { renderHeader, renderHotkeySplit, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
 import { evaluate5, evaluate2, isJoker } from "./cards";
 import { getArrangedHands } from "./game";
@@ -240,6 +240,9 @@ export function renderPaiGowScreen(state: AppState): string[] {
 
   // Header
   lines.push(...renderHeader("PAI GOW POKER", state.balance, width));
+
+  const warn = widthWarning(width, 90);
+  if (warn) lines.push(warn);
 
   lines.push(`${pad}${t.gray}Bet: ${t.reset}${t.brightWhite}${t.bold}$${pg.betAmount}${t.reset}`);
   lines.push("");
