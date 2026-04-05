@@ -154,6 +154,8 @@ export function getArrangedHands(pg: PaiGowState): { high: PaiGowCard[]; low: Pa
   const lowSet = new Set(pg.lowHand);
   const low = pg.lowHand.map(i => pg.playerCards[i]!);
   const high = pg.playerCards.filter((_, i) => !lowSet.has(i));
+  sortCards(low, pg.sortMode);
+  sortCards(high, pg.sortMode);
   return { high, low };
 }
 

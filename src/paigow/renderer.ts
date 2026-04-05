@@ -330,6 +330,68 @@ function renderSpreadingSplitHand(
   return lines;
 }
 
+// Animate cards sliding from 7-in-a-row positions to the 5+gap+2 split layout
+function renderRearrangingCards(
+  cards: PaiGowCard[], lowIndices: number[], progress: number,
+): string[] {
+  const SLOT = 12;
+  const GAP = 5;
+  const LOW_START = 5 * SLOT - 1 + GAP; // 64
+
+  const lowSet = new Set(lowIndices);
+
+  // Compute final positions
+  let highN = 0;
+  let lowN = 0;
+  const endPos: number[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    if (lowSet.has(i)) {
+      endPos.push(LOW_START + lowN * SLOT);
+      lowN++;
+    } else {
+      endPos.push(highN * SLOT);
+      highN++;
+    }
+  }
+
+  // Interpolate each card from start (i*SLOT) to end
+  const items: { cardIdx: number; pos: number }[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    const start = i * SLOT;
+    const end = endPos[i]!;
+    items.push({ cardIdx: i, pos: Math.floor(start + (end - start) * progress) });
+  }
+
+  // Sort by current position for left-to-right rendering
+  items.sort((a, b) => a.pos - b.pos);
+
+  const cardImgs = cards.map(c => renderCard(c));
+  const lines: string[] = [];
+
+  for (let row = 0; row < CARD_H; row++) {
+    let line = "";
+    let pos = 0;
+
+    for (let i = 0; i < items.length; i++) {
+      const offset = items[i]!.pos;
+      const nextOffset = i < items.length - 1 ? items[i + 1]!.pos : offset + 11;
+      const visW = Math.min(11, Math.max(0, nextOffset - offset));
+
+      if (offset > pos) {
+        line += " ".repeat(offset - pos);
+        pos = offset;
+      }
+
+      if (visW > 0) {
+        line += sliceAnsiShared(cardImgs[items[i]!.cardIdx]![row]!, 0, visW);
+        pos = offset + visW;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 // Render high (5) and low (2) on one row: high left-aligned, gap, low right
 function renderSplitHandRow(high: PaiGowCard[], low: PaiGowCard[], faceDown: boolean = false): string[] {
   const highImgs: string[][] = high.map(c => faceDown ? renderFaceDown() : renderCard(c));
@@ -526,7 +588,7 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
   if (isAnimating) {
     lines.push("");
-    const playerRow = renderSpreadingSplitHand(pHigh, pLow, progress);
+    const playerRow = renderRearrangingCards(pg.playerCards, pg.lowHand, progress);
     for (const line of playerRow) lines.push(`${pad}${line}`);
     lines.push("");
   } else {
