@@ -45,6 +45,10 @@ function suitColor2(suit: string): string {
 // Set by renderPaiGowScreen before card rendering
 let getSuitColor: (suit: string) => string = suitColor4;
 
+// Fixed column widths for hand detail display
+const LABEL_W = 10; // "High (5): " or "Low  (2): "
+const NAME_W = 32;  // hand description padded
+
 // --- Card rendering ---
 
 function renderPipBody(clr: string, suit: string, rank: Rank): string[] {
@@ -353,10 +357,9 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
     const lowSorted = sortHandForDisplay(low);
     const highCards = highSorted.map(c => cardShortFixed(c)).join("");
     const lowCards = lowSorted.map(c => cardShortFixed(c)).join("");
-    const nameW = 20;
 
-    lines.push(`${pad}${t.cyan}High (5): ${t.reset}${t.brightWhite}${highEval.name.padEnd(nameW)}${t.reset}${highCards}`);
-    lines.push(`${pad}${t.cyan}Low  (2): ${t.reset}${t.brightWhite}${lowEval.name.padEnd(nameW)}${t.reset}${lowCards}`);
+    lines.push(`${pad}${t.cyan}${"High (5):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${highEval.name.padEnd(NAME_W)}${t.reset}${highCards}`);
+    lines.push(`${pad}${t.cyan}${"Low  (2):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${lowEval.name.padEnd(NAME_W)}${t.reset}${lowCards}`);
 
     if (pg.foulMessage) {
       lines.push(`${pad}${t.red}${t.bold}${pg.foulMessage}${t.reset}`);
@@ -379,9 +382,8 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
 
 function renderResultPhase(lines: string[], state: AppState, pad: string, _width: number): void {
   const pg = state.paigow;
-  const nameW = 20;
-  const highLabel = `${t.cyan}High (5)${t.reset}`;
-  const lowLabel = `${t.cyan}Low  (2)${t.reset}`;
+  const hLabel = `${t.cyan}${"High (5):".padEnd(LABEL_W)}${t.reset}`;
+  const lLabel = `${t.cyan}${"Low  (2):".padEnd(LABEL_W)}${t.reset}`;
 
   // Dealer
   const dHighEval = evaluate5(pg.dealerHigh);
@@ -390,7 +392,7 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const dLowSorted = sortHandForDisplay(pg.dealerLow);
 
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
-  lines.push(`${pad}${highLabel}  ${t.brightWhite}${dHighEval.name.padEnd(nameW)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}     ${lowLabel}  ${t.brightWhite}${dLowEval.name}${t.reset}`);
+  lines.push(`${pad}${hLabel}${t.brightWhite}${dHighEval.name.padEnd(NAME_W)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}     ${lLabel}${t.brightWhite}${dLowEval.name}${t.reset}`);
   const dealerRow = renderSplitHandRow(pg.dealerHigh, pg.dealerLow);
   for (const line of dealerRow) lines.push(`${pad}${line}`);
   lines.push("");
@@ -408,7 +410,7 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
 
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
-  lines.push(`${pad}${highLabel}  ${t.brightWhite}${pHighEval.name.padEnd(nameW)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")} ${highResult}  ${lowLabel}  ${t.brightWhite}${pLowEval.name}${t.reset}  ${lowResult}`);
+  lines.push(`${pad}${hLabel}${t.brightWhite}${pHighEval.name.padEnd(NAME_W)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")} ${highResult}  ${lLabel}${t.brightWhite}${pLowEval.name}${t.reset}  ${lowResult}`);
   const playerRow = renderSplitHandRow(pHigh, pLow);
   for (const line of playerRow) lines.push(`${pad}${line}`);
   lines.push("");
