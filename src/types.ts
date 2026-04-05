@@ -154,7 +154,7 @@ export interface PokerHandEval {
   name: string;         // display name, e.g. "Pair of Aces"
 }
 
-export type PaiGowSortMode = 'ascending' | 'descending' | 'unsorted';
+export type PaiGowSortMode = 'ascending' | 'descending';
 
 export interface PaiGowState {
   phase: PaiGowPhase;

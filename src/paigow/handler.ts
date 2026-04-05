@@ -5,9 +5,7 @@ import type { KeyEvent } from "../keybindings";
 import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound, startSpreadAnim, skipSpreadAnim, resortPlayerCards } from "./game";
 
 function cycleSortMode(pg: PaiGowState): void {
-  const modes = ['ascending', 'descending', 'unsorted'] as const;
-  const idx = modes.indexOf(pg.sortMode);
-  pg.sortMode = modes[(idx + 1) % modes.length]!;
+  pg.sortMode = pg.sortMode === 'ascending' ? 'descending' : 'ascending';
   resortPlayerCards(pg);
 }
 

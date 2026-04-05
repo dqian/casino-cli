@@ -30,16 +30,16 @@ export function createPaiGowState(): PaiGowState {
 }
 
 function sortCards(cards: PaiGowCard[], mode: PaiGowSortMode): void {
-  if (mode === 'unsorted') return;
   const dir = mode === 'ascending' ? 1 : -1;
   cards.sort((a, b) => {
-    const va = isJoker(a) ? (mode === 'ascending' ? 15 : 15) : rankValue(a.rank);
-    const vb = isJoker(b) ? (mode === 'ascending' ? 15 : 15) : rankValue(b.rank);
+    const va = isJoker(a) ? 15 : rankValue(a.rank);
+    const vb = isJoker(b) ? 15 : rankValue(b.rank);
     return (va - vb) * dir;
   });
 }
 
-// Re-sort player cards, preserving lowHand selection by card identity
+// Re-sort player cards, preserving lowHand selection by card identity.
+// Also re-sorts dealer high/low if in result phase.
 export function resortPlayerCards(pg: PaiGowState): void {
   if (pg.playerCards.length === 0) return;
   const lowCards = pg.lowHand.map(i => pg.playerCards[i]!);
@@ -56,6 +56,9 @@ export function resortPlayerCards(pg: PaiGowState): void {
       }
     }
   }
+  // Sort dealer hands too
+  if (pg.dealerHigh.length > 0) sortCards(pg.dealerHigh, pg.sortMode);
+  if (pg.dealerLow.length > 0) sortCards(pg.dealerLow, pg.sortMode);
 }
 
 // --- Deal ---
@@ -167,8 +170,10 @@ export function confirmArrangement(state: AppState): void {
     return;
   }
 
-  // Dealer arranges by house way
+  // Dealer arranges by house way, sorted to match player's sort preference
   const { high: dHigh, low: dLow } = houseWay(pg.dealerCards);
+  sortCards(dHigh, pg.sortMode);
+  sortCards(dLow, pg.sortMode);
   pg.dealerHigh = dHigh;
   pg.dealerLow = dLow;
 

@@ -121,9 +121,10 @@ function renderCard(card: PaiGowCard): string[] {
 
 function renderJokerCard(): string[] {
   const clr = t.fg256(213); // magenta/pink
-  const topLabel = `★`;
-  const topLine = `${clr}${t.bold}${topLabel}${t.reset}${" ".repeat(INNER_W - 1)}`;
-  const botLine = `${" ".repeat(INNER_W - 1)}${clr}${t.bold}${topLabel}${t.reset}`;
+  const topLabel = `J★`;
+  const topLine = `${clr}${t.bold}${topLabel}${t.reset}${" ".repeat(INNER_W - topLabel.length)}`;
+  const botLabel = `★J`;
+  const botLine = `${" ".repeat(INNER_W - botLabel.length)}${clr}${t.bold}${botLabel}${t.reset}`;
 
   const bodyRows = renderJokerBody();
 
@@ -548,14 +549,14 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
 
 // Short name for a card (for text display)
 function cardShortName(card: PaiGowCard): string {
-  if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr${t.reset}`;
+  if (isJoker(card)) return `${t.fg256(213)}${t.bold}J★${t.reset}`;
   const clr = getSuitColor(card.suit as string);
   return `${clr}${card.rank}${card.suit}${t.reset}`;
 }
 
 // Fixed-width short name (4 vis chars) for grid alignment
 function cardShortFixed(card: PaiGowCard): string {
-  if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr ${t.reset}`;
+  if (isJoker(card)) return `${t.fg256(213)}${t.bold}J★${t.reset}  `;
   const clr = getSuitColor(card.suit as string);
   const label = `${card.rank}${card.suit}`;
   return `${clr}${label}${t.reset}${" ".repeat(Math.max(0, 4 - label.length))}`;
@@ -597,7 +598,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
         { key: "Enter", label: "Deal" },
       ];
       right = [
-        { key: "s", label: `Sort: ${pg.sortMode}` },
+        { key: "s", label: `Sort: ${pg.sortMode === 'ascending' ? 'asc' : 'desc'}` },
         { key: "k", label: pg.coloredSuits ? "4-color suits" : "2-color suits" },
         { key: "q", label: "Menu" },
       ];
@@ -611,7 +612,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
       ];
       right = [
         { key: "c", label: "Clear selection" },
-        { key: "s", label: `Sort: ${pg.sortMode}` },
+        { key: "s", label: `Sort: ${pg.sortMode === 'ascending' ? 'asc' : 'desc'}` },
         { key: "k", label: pg.coloredSuits ? "4-color suits" : "2-color suits" },
         { key: "q", label: "Menu" },
       ];
@@ -621,7 +622,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
         { key: "Enter", label: "New round" },
       ];
       right = [
-        { key: "s", label: `Sort: ${pg.sortMode}` },
+        { key: "s", label: `Sort: ${pg.sortMode === 'ascending' ? 'asc' : 'desc'}` },
         { key: "q", label: "Menu" },
       ];
       break;
