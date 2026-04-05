@@ -382,17 +382,35 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
 
 function renderResultPhase(lines: string[], state: AppState, pad: string, _width: number): void {
   const pg = state.paigow;
-  const hLabel = `${t.cyan}${"High (5):".padEnd(LABEL_W)}${t.reset}`;
-  const lLabel = `${t.cyan}${"Low  (2):".padEnd(LABEL_W)}${t.reset}`;
+
+  // Card row geometry: 5 cards (59) + 5 gap + 2 cards (23) = 87
+  const HIGH_W = 5 * 11 + 4; // 59
+  const GAP_W = 5;
+  const LOW_W = 2 * 11 + 1;  // 23
+  const ROW_W = HIGH_W + GAP_W + LOW_W; // 87
+
+  const hLabel = `${t.cyan}High (5)${t.reset}  `;
+  const lLabel = `${t.cyan}Low  (2)${t.reset}  `;
+
+  function handInfoLine(highName: string, lowName: string): string {
+    const highPart = t.stripAnsi(hLabel).length + highName.length;
+    const lowPart = t.stripAnsi(lLabel).length + lowName.length;
+    const gap = Math.max(2, ROW_W - highPart - lowPart);
+    return `${pad}${hLabel}${t.brightWhite}${highName}${t.reset}${" ".repeat(gap)}${lLabel}${t.brightWhite}${lowName}${t.reset}`;
+  }
+
+  function resultLine(highRes: string, lowRes: string): string {
+    const highVisLen = t.stripAnsi(highRes).length;
+    const gap = Math.max(2, ROW_W - highVisLen - t.stripAnsi(lowRes).length);
+    return `${pad}${highRes}${" ".repeat(gap)}${lowRes}`;
+  }
 
   // Dealer
   const dHighEval = evaluate5(pg.dealerHigh);
   const dLowEval = evaluate2(pg.dealerLow);
-  const dHighSorted = sortHandForDisplay(pg.dealerHigh);
-  const dLowSorted = sortHandForDisplay(pg.dealerLow);
 
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
-  lines.push(`${pad}${hLabel}${t.brightWhite}${dHighEval.name.padEnd(NAME_W)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}     ${lLabel}${t.brightWhite}${dLowEval.name}${t.reset}`);
+  lines.push(handInfoLine(dHighEval.name, dLowEval.name));
   const dealerRow = renderSplitHandRow(pg.dealerHigh, pg.dealerLow);
   for (const line of dealerRow) lines.push(`${pad}${line}`);
   lines.push("");
@@ -401,8 +419,6 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const { high: pHigh, low: pLow } = getArrangedHands(pg);
   const pHighEval = evaluate5(pHigh);
   const pLowEval = evaluate2(pLow);
-  const pHighSorted = sortHandForDisplay(pHigh);
-  const pLowSorted = sortHandForDisplay(pLow);
 
   const highCmp = pHighEval.value - dHighEval.value;
   const lowCmp = pLowEval.value - dLowEval.value;
@@ -410,12 +426,13 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
 
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
-  lines.push(`${pad}${hLabel}${t.brightWhite}${pHighEval.name.padEnd(NAME_W)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")} ${highResult}  ${lLabel}${t.brightWhite}${pLowEval.name}${t.reset}  ${lowResult}`);
+  lines.push(handInfoLine(pHighEval.name, pLowEval.name));
   const playerRow = renderSplitHandRow(pHigh, pLow);
   for (const line of playerRow) lines.push(`${pad}${line}`);
+  lines.push(resultLine(highResult, lowResult));
   lines.push("");
 
-  // Result
+  // Net result
   if (pg.winAmount > 0) {
     lines.push(`${pad}${t.green}${t.bold}+$${pg.winAmount}${t.reset}  ${t.green}${pg.resultMessage}${t.reset}`);
   } else if (pg.winAmount < 0) {
