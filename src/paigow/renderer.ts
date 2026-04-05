@@ -31,7 +31,7 @@ const PIP_LAYOUTS: Record<string, { c: number; r: number }[]> = {
 // 4-color suit mapping: ♠=white, ♥=red, ♦=blue, ♣=green
 function suitColor4(suit: string): string {
   switch (suit) {
-    case '♠': return t.brightWhite;
+    case '♠': return t.fg256(147);  // lavender
     case '♥': return t.brightRed;
     case '♦': return t.fg256(75);   // blue
     case '♣': return t.fg256(78);   // green
