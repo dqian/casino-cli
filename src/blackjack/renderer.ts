@@ -1,99 +1,18 @@
-import type { AppState, Card, Rank } from "../types";
+import type { AppState, Card } from "../types";
 import * as t from "../theme";
 import { handValue, isBlackjack, hiLoValue } from "./deck";
 import { canSplit, canDouble } from "./game";
 import { getBasicStrategyHint } from "./strategy";
 import { renderHeader, sliceAnsi, renderHotkeySplit, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
-
-const CARD_H = 9;
-const INNER_W = 9;
-const INNER_H = 7;
-
-// Pip positions: { c: column 0-8, r: row 1-5 } within the 7-row content area
-// Rows 0 and 6 are corners; rows 1-5 are the pip area
-// Columns: left=1, center=4, right=7
-const PIP_LAYOUTS: Record<string, { c: number; r: number }[]> = {
-  'A':  [{c:4,r:3}],
-  '2':  [{c:4,r:1}, {c:4,r:5}],
-  '3':  [{c:4,r:1}, {c:4,r:3}, {c:4,r:5}],
-  '4':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:5}, {c:7,r:5}],
-  '5':  [{c:1,r:1}, {c:7,r:1}, {c:4,r:3}, {c:1,r:5}, {c:7,r:5}],
-  '6':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:1,r:5}, {c:7,r:5}],
-  '7':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:4,r:2}, {c:1,r:5}, {c:7,r:5}],
-  '8':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:4,r:2}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
-  '9':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:2}, {c:7,r:2}, {c:4,r:3}, {c:1,r:4}, {c:7,r:4}, {c:1,r:5}, {c:7,r:5}],
-  '10': [{c:1,r:1}, {c:7,r:1}, {c:4,r:2}, {c:1,r:2}, {c:7,r:2}, {c:1,r:4}, {c:7,r:4}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
-};
-
-function renderPipBody(clr: string, suit: string, rank: Rank): string[] {
-  const pips = PIP_LAYOUTS[rank] ?? [];
-  const pipSet = new Set(pips.map(p => `${p.r},${p.c}`));
-  const rows: string[] = [];
-  for (let row = 1; row <= 5; row++) {
-    let line = "";
-    for (let col = 0; col < INNER_W; col++) {
-      if (pipSet.has(`${row},${col}`)) {
-        line += `${clr}${t.bold}${suit}${t.reset}`;
-      } else {
-        line += " ";
-      }
-    }
-    rows.push(line);
-  }
-  return rows;
-}
-
-function renderFaceBody(clr: string, suit: string, rank: string): string[] {
-  return [
-    `  ${clr}╭───╮${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${suit}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${rank}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${suit}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}╰───╯${t.reset}  `,
-  ];
-}
+import {
+  CARD_H, INNER_W, INNER_H, renderStandardCard, renderFaceDown,
+} from "../shared/cardRender";
 
 function renderCard(card: Card | null): string[] {
   if (!card) return renderFaceDown();
-
-  const isRed = card.suit === '♥' || card.suit === '♦';
-  const clr = isRed ? t.brightRed : t.brightWhite;
-  const s = card.suit;
-  const r = card.rank;
-
-  const topLabel = `${r}${s}`;
-  const topLine = `${clr}${t.bold}${topLabel}${t.reset}${" ".repeat(INNER_W - topLabel.length)}`;
-
-  const botLabel = `${s}${r}`;
-  const botLine = `${" ".repeat(INNER_W - botLabel.length)}${clr}${t.bold}${botLabel}${t.reset}`;
-
-  const bodyRows = (r === 'J' || r === 'Q' || r === 'K')
-    ? renderFaceBody(clr, s, r)
-    : renderPipBody(clr, s, r);
-
-  const lines: string[] = [];
-  lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
-  lines.push(`${t.gray}│${t.reset}${topLine}${t.gray}│${t.reset}`);
-  for (const row of bodyRows) lines.push(`${t.gray}│${t.reset}${row}${t.gray}│${t.reset}`);
-  lines.push(`${t.gray}│${t.reset}${botLine}${t.gray}│${t.reset}`);
-  lines.push(`${t.gray}└${"─".repeat(INNER_W)}┘${t.reset}`);
-  return lines;
-}
-
-function renderFaceDown(): string[] {
-  const backClr = t.fg256(24);
-  const lines: string[] = [];
-  lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
-  for (let r = 0; r < INNER_H; r++) {
-    let pattern = "";
-    for (let c = 0; c < INNER_W; c++) {
-      pattern += (r + c) % 2 === 0 ? "░" : "▒";
-    }
-    lines.push(`${t.gray}│${t.reset}${backClr}${pattern}${t.reset}${t.gray}│${t.reset}`);
-  }
-  lines.push(`${t.gray}└${"─".repeat(INNER_W)}┘${t.reset}`);
-  return lines;
+  const clr = (card.suit === '♥' || card.suit === '♦') ? t.brightRed : t.brightWhite;
+  return renderStandardCard(card.rank, card.suit, clr);
 }
 
 function renderPlaceholderCard(): string[] {

@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "options";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "options";
 
 export type MenuItem = {
   name: string;
@@ -16,6 +16,10 @@ export interface GameOptions {
   blackjack: {
     numDecks: number;
   };
+  paigow: {
+    defaultSort: PaiGowSortMode;
+    coloredSuits: boolean;
+  };
 }
 
 export interface AppState {
@@ -28,6 +32,7 @@ export interface AppState {
   messageTimeout: ReturnType<typeof setTimeout> | null;
   roulette: RouletteState;
   blackjack: BlackjackState;
+  paigow: PaiGowState;
   options: GameOptions;
   optionsCursor: number;
 }
@@ -124,6 +129,54 @@ export interface BlackjackState {
 export interface CardAnim {
   target: 'dealer' | 'player';  // which hand is receiving the card
   frame: number;                // current animation frame
+}
+
+// Pai Gow Poker types
+export type PaiGowPhase = 'betting' | 'arranging' | 'result';
+
+export interface PaiGowCard {
+  rank: Rank | 'Joker';
+  suit: Suit | 'wild';
+}
+
+export type PokerHandRank =
+  | 'five-aces'
+  | 'royal-flush'
+  | 'straight-flush'
+  | 'four-of-a-kind'
+  | 'full-house'
+  | 'flush'
+  | 'straight'
+  | 'three-of-a-kind'
+  | 'two-pair'
+  | 'one-pair'
+  | 'high-card';
+
+export interface PokerHandEval {
+  rank: PokerHandRank;
+  value: number;        // numeric value for comparison (higher = better)
+  name: string;         // display name, e.g. "Pair of Aces"
+}
+
+export type PaiGowSortMode = 'ascending' | 'descending';
+
+export interface PaiGowState {
+  phase: PaiGowPhase;
+  deck: PaiGowCard[];
+  playerCards: PaiGowCard[];    // all 7 cards
+  dealerCards: PaiGowCard[];    // all 7 cards
+  lowHand: number[];            // indices into playerCards for 2-card hand
+  cursor: number;               // card selection cursor (0-6)
+  dealerHigh: PaiGowCard[];     // dealer's arranged 5-card hand
+  dealerLow: PaiGowCard[];      // dealer's arranged 2-card hand
+  betAmount: number;
+  winAmount: number;
+  resultMessage: string;
+  foulMessage: string;          // shown if arrangement is invalid
+  sortMode: PaiGowSortMode;
+  coloredSuits: boolean;
+  spreadFrame: number;          // 0 = no anim, >0 = spreading cards
+  sortFrame: number;            // 0 = no anim, >0 = sort animation
 }
 
 // Game module interface — each game implements this for TUI dispatch

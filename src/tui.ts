@@ -1,4 +1,4 @@
-import type { AppState, RouletteState, BlackjackState, GameOptions, GameModule } from "./types";
+import type { AppState, RouletteState, BlackjackState, PaiGowState, GameOptions, GameModule } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
@@ -8,6 +8,9 @@ import { handleRouletteKey } from "./roulette/handler";
 import { handleBlackjackKey } from "./blackjack/handler";
 import { renderRouletteScreen, renderHotkeyGrid as renderRouletteHotkeys } from "./roulette/renderer";
 import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer";
+import { handlePaiGowKey } from "./paigow/handler";
+import { renderPaiGowScreen, renderPaiGowHotkeys } from "./paigow/renderer";
+import { createPaiGowState, newRound as newPaiGowRound } from "./paigow/game";
 
 // --- Game registry ---
 
@@ -22,6 +25,11 @@ export const GAMES: Record<string, GameModule> = {
     render: renderBlackjackScreen,
     renderHotkeys: renderBjHotkeyGrid,
   },
+  paigow: {
+    handleKey: handlePaiGowKey,
+    render: renderPaiGowScreen,
+    renderHotkeys: renderPaiGowHotkeys,
+  },
 };
 
 // --- State creation ---
@@ -30,6 +38,7 @@ function createDefaultOptions(): GameOptions {
   return {
     roulette: { defaultWheelMode: "ball", tableMax: null },
     blackjack: { numDecks: 2 },
+    paigow: { defaultSort: "descending", coloredSuits: true },
   };
 }
 
@@ -97,6 +106,7 @@ function createState(): AppState {
     messageTimeout: null,
     roulette: createRouletteState(options),
     blackjack: createBlackjackState(options),
+    paigow: createPaiGowState(options),
     options,
     optionsCursor: 0,
   };
@@ -204,6 +214,10 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
             state.blackjack.runningCount = 0;
           }
           newBjRound(state);
+        } else if (item.screen === "paigow") {
+          state.paigow.sortMode = state.options.paigow.defaultSort;
+          state.paigow.coloredSuits = state.options.paigow.coloredSuits;
+          newPaiGowRound(state);
         }
         state.message = "";
       } else {
@@ -252,7 +266,7 @@ const DECK_OPTIONS = [1, 2, 4, 6, 8];
 
 function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): void {
   const opts = state.options;
-  const total = 3;
+  const total = 5;
 
   switch (key.name) {
     case "up":
@@ -281,6 +295,14 @@ function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): vo
           const idx = DECK_OPTIONS.indexOf(opts.blackjack.numDecks);
           const next = Math.max(0, Math.min(DECK_OPTIONS.length - 1, idx + dir));
           opts.blackjack.numDecks = DECK_OPTIONS[next]!;
+          break;
+        }
+        case 3: {
+          opts.paigow.defaultSort = opts.paigow.defaultSort === "ascending" ? "descending" : "ascending";
+          break;
+        }
+        case 4: {
+          opts.paigow.coloredSuits = !opts.paigow.coloredSuits;
           break;
         }
       }
