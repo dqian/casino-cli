@@ -1,6 +1,7 @@
 import type { AppState, MenuItem, GameModule } from "./types";
 import * as t from "./theme";
 import { GAMES } from "./tui";
+import { sliceAnsi } from "./shared/render";
 
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
@@ -223,8 +224,11 @@ function writeLines(lines: string[], totalRows: number): void {
   for (let i = 0; i < totalRows; i++) {
     const line = lines[i] ?? "";
     const visLen = t.stripAnsi(line).length;
+    // Truncate lines that exceed terminal width to prevent wrapping
+    const clamped = visLen > width ? sliceAnsi(line, 0, width) : line;
+    const clampedLen = Math.min(visLen, width);
     // Pad to full width to overwrite previous content (no eraseLine flicker)
-    out.push(line + " ".repeat(Math.max(0, width - visLen)));
+    out.push(clamped + " ".repeat(Math.max(0, width - clampedLen)));
     if (i < totalRows - 1) out.push("\n");
   }
   process.stdout.write(out.join(""));
