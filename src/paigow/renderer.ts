@@ -510,7 +510,7 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
     const lowCards = lowSorted.map(c => cardShortFixed(c)).join("");
 
     lines.push(`${pad}${t.cyan}${"High (5):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${highEval.name.padEnd(NAME_W)}${t.reset}${highCards}`);
-    lines.push(`${pad}${t.cyan}${"Low  (2):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${lowEval.name.padEnd(NAME_W)}${t.reset}${lowCards}`);
+    lines.push(`${pad}${t.brightWhite}${lowEval.name.padEnd(LABEL_W + NAME_W)}${t.reset}${lowCards}  ${t.cyan}Low (2)${t.reset}`);
 
     if (pg.foulMessage) {
       lines.push(`${pad}${t.red}${t.bold}${pg.foulMessage}${t.reset}`);
@@ -541,13 +541,13 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const ROW_W = HIGH_W + GAP_W + LOW_W; // 87
 
   const hLabel = `${t.cyan}High (5)${t.reset}  `;
-  const lLabel = `${t.cyan}Low  (2)${t.reset}  `;
+  const lLabelSuffix = `  ${t.cyan}Low (2)${t.reset}`;
 
   function handInfoLine(highName: string, lowName: string): string {
     const highPart = t.stripAnsi(hLabel).length + highName.length;
-    const lowPart = t.stripAnsi(lLabel).length + lowName.length;
+    const lowPart = lowName.length + t.stripAnsi(lLabelSuffix).length;
     const gap = Math.max(2, ROW_W - highPart - lowPart);
-    return `${pad}${hLabel}${t.brightWhite}${highName}${t.reset}${" ".repeat(gap)}${lLabel}${t.brightWhite}${lowName}${t.reset}`;
+    return `${pad}${hLabel}${t.brightWhite}${highName}${t.reset}${" ".repeat(gap)}${t.brightWhite}${lowName}${t.reset}${lLabelSuffix}`;
   }
 
   function resultLine(highRes: string, lowRes: string): string {
