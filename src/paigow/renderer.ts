@@ -511,7 +511,7 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
 
     const nameW = Math.max(highEval.name.length, lowEval.name.length) + 2;
     lines.push(`${pad}${t.cyan}${"High (5):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${highEval.name.padEnd(nameW)}${t.reset}${highCards}`);
-    lines.push(`${pad}${t.brightWhite}${lowEval.name.padEnd(LABEL_W + nameW)}${t.reset}${lowCards}  ${t.cyan}Low (2)${t.reset}`);
+    lines.push(`${pad}${t.cyan}${"Low  (2):".padEnd(LABEL_W)}${t.reset}${t.brightWhite}${lowEval.name.padEnd(nameW)}${t.reset}${lowCards}`);
 
     if (pg.foulMessage) {
       lines.push(`${pad}${t.red}${t.bold}${pg.foulMessage}${t.reset}`);
