@@ -171,6 +171,7 @@ export interface PaiGowState {
   foulMessage: string;          // shown if arrangement is invalid
   sortMode: PaiGowSortMode;
   coloredSuits: boolean;
+  spreadFrame: number;          // 0 = no anim, >0 = spreading cards
 }
 
 // Game module interface — each game implements this for TUI dispatch

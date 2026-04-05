@@ -2,10 +2,18 @@
 
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound } from "./game";
+import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound, startSpreadAnim, skipSpreadAnim } from "./game";
 
-export function handlePaiGowKey(state: AppState, key: KeyEvent, _render: () => void): void {
+export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => void): void {
   const pg = state.paigow;
+
+  // Spread animation: Enter skips
+  if (pg.spreadFrame > 0) {
+    if (key.name === 'return') {
+      skipSpreadAnim(state);
+    }
+    return;
+  }
 
   // Result phase
   if (pg.phase === 'result') {
@@ -68,6 +76,7 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, _render: () => v
   switch (key.name) {
     case 'return':
       deal(state);
+      startSpreadAnim(state, render);
       return;
     case 's': {
       const modes = ['ascending', 'descending', 'unsorted'] as const;

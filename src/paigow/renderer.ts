@@ -5,7 +5,8 @@ import * as t from "../theme";
 import { renderHeader, renderHotkeySplit, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
 import { evaluate5, evaluate2, isJoker, rankValue } from "./cards";
-import { getArrangedHands } from "./game";
+import { getArrangedHands, spreadProgress } from "./game";
+import { sliceAnsi as sliceAnsiShared } from "../shared/render";
 
 const CARD_H = 9;
 const INNER_W = 9;
@@ -251,6 +252,40 @@ function renderCompactCardRow(cards: PaiGowCard[], faceDown: boolean = false): s
   return lines;
 }
 
+// Render cards spreading from stacked to full spread
+function renderSpreadingCards(
+  cards: PaiGowCard[], progress: number, faceDown: boolean,
+): string[] {
+  const SLOT = 12;
+  const cardImgs = cards.map(c => faceDown ? renderFaceDown() : renderCard(c));
+  const n = cards.length;
+  const offsets = cards.map((_, i) => Math.floor(i * SLOT * progress));
+  const lines: string[] = [];
+
+  for (let row = 0; row < CARD_H; row++) {
+    let line = "";
+    let pos = 0;
+
+    for (let i = 0; i < n; i++) {
+      const offset = offsets[i]!;
+      const nextOffset = i < n - 1 ? offsets[i + 1]! : offset + 11;
+      const visW = Math.min(11, Math.max(0, nextOffset - offset));
+
+      if (offset > pos) {
+        line += " ".repeat(offset - pos);
+        pos = offset;
+      }
+
+      if (visW > 0) {
+        line += sliceAnsiShared(cardImgs[i]![row]!, 0, visW);
+        pos = offset + visW;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 // Render high (5) and low (2) on one row: high left-aligned, gap, low right
 function renderSplitHandRow(high: PaiGowCard[], low: PaiGowCard[], faceDown: boolean = false): string[] {
   const highImgs: string[][] = high.map(c => faceDown ? renderFaceDown() : renderCard(c));
@@ -326,24 +361,39 @@ function renderBettingPhase(lines: string[], state: AppState, pad: string): void
 function renderArrangingPhase(lines: string[], state: AppState, pad: string): void {
   const pg = state.paigow;
 
+  const progress = spreadProgress(pg);
+  const isAnimating = pg.spreadFrame > 0;
+
   // Dealer — face down
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
   lines.push("");
-  const dealerCards = renderCompactCardRow(pg.dealerCards, true);
-  for (const line of dealerCards) lines.push(`${pad}${line}`);
+  if (isAnimating) {
+    const dealerCards = renderSpreadingCards(pg.dealerCards, progress, true);
+    for (const line of dealerCards) lines.push(`${pad}${line}`);
+  } else {
+    const dealerCards = renderCompactCardRow(pg.dealerCards, true);
+    for (const line of dealerCards) lines.push(`${pad}${line}`);
+  }
   lines.push("");
 
   // Player's cards with selection UI
-  lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}  ${t.gray}Select 2 cards for low hand${t.reset}`);
+  lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}${isAnimating ? "" : `  ${t.gray}Select 2 cards for low hand${t.reset}`}`);
   // renderCardRow adds elevation row at top + cursor row at bottom, matching betting layout
 
-  const lowSet = new Set(pg.lowHand);
-  const playerCardLines = renderCardRow(pg.playerCards, {
-    highlighted: lowSet,
-    cursor: pg.cursor,
-    elevated: lowSet,
-  });
-  for (const line of playerCardLines) lines.push(`${pad}${line}`);
+  if (isAnimating) {
+    lines.push(""); // elevation placeholder
+    const playerCards = renderSpreadingCards(pg.playerCards, progress, false);
+    for (const line of playerCards) lines.push(`${pad}${line}`);
+    lines.push(""); // cursor placeholder
+  } else {
+    const lowSet = new Set(pg.lowHand);
+    const playerCardLines = renderCardRow(pg.playerCards, {
+      highlighted: lowSet,
+      cursor: pg.cursor,
+      elevated: lowSet,
+    });
+    for (const line of playerCardLines) lines.push(`${pad}${line}`);
+  }
 
   // Show current hand groupings
   lines.push("");

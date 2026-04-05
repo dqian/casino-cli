@@ -25,6 +25,7 @@ export function createPaiGowState(): PaiGowState {
     foulMessage: '',
     sortMode: 'ascending',
     coloredSuits: true,
+    spreadFrame: 0,
   };
 }
 
@@ -59,8 +60,44 @@ export function deal(state: AppState): void {
   pg.winAmount = 0;
   pg.resultMessage = '';
   pg.foulMessage = '';
+  pg.spreadFrame = 1;
   pg.phase = 'arranging';
   state.message = '';
+}
+
+// --- Spread animation ---
+
+const SPREAD_FRAMES = 12;
+const SPREAD_DELAY = 45;
+let spreadGen = 0;
+
+export function startSpreadAnim(state: AppState, render: () => void): void {
+  const gen = ++spreadGen;
+  const step = () => {
+    const pg = state.paigow;
+    if (gen !== spreadGen || pg.spreadFrame <= 0) return;
+    pg.spreadFrame++;
+    if (pg.spreadFrame > SPREAD_FRAMES) {
+      pg.spreadFrame = 0;
+      render();
+      return;
+    }
+    render();
+    setTimeout(step, SPREAD_DELAY);
+  };
+  render();
+  setTimeout(step, SPREAD_DELAY);
+}
+
+export function skipSpreadAnim(state: AppState): void {
+  spreadGen++;
+  state.paigow.spreadFrame = 0;
+}
+
+export function spreadProgress(pg: PaiGowState): number {
+  if (pg.spreadFrame <= 0) return 1;
+  const t = Math.min(1, pg.spreadFrame / SPREAD_FRAMES);
+  return 1 - Math.pow(1 - t, 2); // ease-out
 }
 
 // --- Toggle a card into/out of the low hand ---
