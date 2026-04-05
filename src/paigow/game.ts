@@ -89,8 +89,8 @@ export function deal(state: AppState): void {
 
 // --- Spread animation ---
 
-const SPREAD_FRAMES = 10;
-const SPREAD_DELAY = 35;
+const SPREAD_FRAMES = 11;
+const SPREAD_DELAY = 33;
 let spreadGen = 0;
 
 export function startSpreadAnim(state: AppState, render: () => void): void {
