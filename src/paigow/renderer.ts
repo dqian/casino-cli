@@ -286,6 +286,49 @@ function renderSpreadingCards(
   return lines;
 }
 
+// Render 7 cards spreading from stacked into the 5+gap+2 split layout
+function renderSpreadingSplitHand(
+  high: PaiGowCard[], low: PaiGowCard[], progress: number,
+): string[] {
+  const SLOT = 12;
+  const GAP = 5;
+  // Final positions: high cards at 0,12,24,36,48; low cards at 64,76
+  const highOffsets = high.map((_, i) => i * SLOT);
+  const lowStart = 5 * SLOT - 1 + GAP; // 59 + 5 = 64
+  const lowOffsets = low.map((_, i) => lowStart + i * SLOT);
+  const finalPositions = [...highOffsets, ...lowOffsets];
+  const allCards = [...high, ...low];
+
+  const cardImgs = allCards.map(c => renderCard(c));
+  const n = allCards.length;
+
+  const offsets = finalPositions.map(fp => Math.floor(fp * progress));
+  const lines: string[] = [];
+
+  for (let row = 0; row < CARD_H; row++) {
+    let line = "";
+    let pos = 0;
+
+    for (let i = 0; i < n; i++) {
+      const offset = offsets[i]!;
+      const nextOffset = i < n - 1 ? offsets[i + 1]! : offset + 11;
+      const visW = Math.min(11, Math.max(0, nextOffset - offset));
+
+      if (offset > pos) {
+        line += " ".repeat(offset - pos);
+        pos = offset;
+      }
+
+      if (visW > 0) {
+        line += sliceAnsiShared(cardImgs[i]![row]!, 0, visW);
+        pos = offset + visW;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 // Render high (5) and low (2) on one row: high left-aligned, gap, low right
 function renderSplitHandRow(high: PaiGowCard[], low: PaiGowCard[], faceDown: boolean = false): string[] {
   const highImgs: string[][] = high.map(c => faceDown ? renderFaceDown() : renderCard(c));
@@ -364,16 +407,11 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
   const progress = spreadProgress(pg);
   const isAnimating = pg.spreadFrame > 0;
 
-  // Dealer — face down
+  // Dealer — face down (no animation, always static)
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
   lines.push("");
-  if (isAnimating) {
-    const dealerCards = renderSpreadingCards(pg.dealerCards, progress, true);
-    for (const line of dealerCards) lines.push(`${pad}${line}`);
-  } else {
-    const dealerCards = renderCompactCardRow(pg.dealerCards, true);
-    for (const line of dealerCards) lines.push(`${pad}${line}`);
-  }
+  const dealerCards = renderCompactCardRow(pg.dealerCards, true);
+  for (const line of dealerCards) lines.push(`${pad}${line}`);
   lines.push("");
 
   // Player's cards with selection UI
@@ -455,14 +493,23 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
     return `${pad}${highRes}${" ".repeat(gap)}${lowRes}`;
   }
 
+  const isAnimating = pg.spreadFrame > 0;
+  const progress = spreadProgress(pg);
+
   // Dealer
   const dHighEval = evaluate5(pg.dealerHigh);
   const dLowEval = evaluate2(pg.dealerLow);
 
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
-  lines.push(handInfoLine(dHighEval.name, dLowEval.name));
-  const dealerRow = renderSplitHandRow(pg.dealerHigh, pg.dealerLow);
-  for (const line of dealerRow) lines.push(`${pad}${line}`);
+  if (isAnimating) {
+    lines.push(""); // placeholder for info line during animation
+    const dealerRow = renderSpreadingSplitHand(pg.dealerHigh, pg.dealerLow, progress);
+    for (const line of dealerRow) lines.push(`${pad}${line}`);
+  } else {
+    lines.push(handInfoLine(dHighEval.name, dLowEval.name));
+    const dealerRow = renderSplitHandRow(pg.dealerHigh, pg.dealerLow);
+    for (const line of dealerRow) lines.push(`${pad}${line}`);
+  }
   lines.push("");
 
   // Player
@@ -557,6 +604,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
       ];
       right = [
         { key: "c", label: "Clear selection" },
+        { key: "s", label: `Sort: ${pg.sortMode}` },
         { key: "k", label: pg.coloredSuits ? "4-color suits" : "2-color suits" },
         { key: "q", label: "Menu" },
       ];
@@ -566,6 +614,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
         { key: "Enter", label: "New round" },
       ];
       right = [
+        { key: "s", label: `Sort: ${pg.sortMode}` },
         { key: "q", label: "Menu" },
       ];
       break;

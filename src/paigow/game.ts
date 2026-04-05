@@ -23,7 +23,7 @@ export function createPaiGowState(): PaiGowState {
     winAmount: 0,
     resultMessage: '',
     foulMessage: '',
-    sortMode: 'ascending',
+    sortMode: 'descending',
     coloredSuits: true,
     spreadFrame: 0,
   };
@@ -37,6 +37,25 @@ function sortCards(cards: PaiGowCard[], mode: PaiGowSortMode): void {
     const vb = isJoker(b) ? (mode === 'ascending' ? 15 : 15) : rankValue(b.rank);
     return (va - vb) * dir;
   });
+}
+
+// Re-sort player cards, preserving lowHand selection by card identity
+export function resortPlayerCards(pg: PaiGowState): void {
+  if (pg.playerCards.length === 0) return;
+  const lowCards = pg.lowHand.map(i => pg.playerCards[i]!);
+  sortCards(pg.playerCards, pg.sortMode);
+  // Remap lowHand indices to new positions
+  const used = new Set<number>();
+  pg.lowHand = [];
+  for (const lc of lowCards) {
+    for (let i = 0; i < pg.playerCards.length; i++) {
+      if (!used.has(i) && pg.playerCards[i] === lc) {
+        pg.lowHand.push(i);
+        used.add(i);
+        break;
+      }
+    }
+  }
 }
 
 // --- Deal ---
@@ -185,6 +204,7 @@ export function confirmArrangement(state: AppState): void {
     pg.resultMessage = 'Push — split hands';
   }
 
+  pg.spreadFrame = 1; // trigger dealer reveal animation
   pg.phase = 'result';
   state.message = '';
 }

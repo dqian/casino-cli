@@ -1,8 +1,15 @@
 // Pai Gow Poker — key handling
 
-import type { AppState } from "../types";
+import type { AppState, PaiGowState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound, startSpreadAnim, skipSpreadAnim } from "./game";
+import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound, startSpreadAnim, skipSpreadAnim, resortPlayerCards } from "./game";
+
+function cycleSortMode(pg: PaiGowState): void {
+  const modes = ['ascending', 'descending', 'unsorted'] as const;
+  const idx = modes.indexOf(pg.sortMode);
+  pg.sortMode = modes[(idx + 1) % modes.length]!;
+  resortPlayerCards(pg);
+}
 
 export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => void): void {
   const pg = state.paigow;
@@ -19,6 +26,8 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
   if (pg.phase === 'result') {
     if (key.name === 'return') {
       newRound(state);
+    } else if (key.name === 's') {
+      cycleSortMode(pg);
     } else if (key.name === 'q' || key.name === 'escape') {
       state.screen = 'menu';
       state.message = '';
@@ -40,8 +49,8 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
         break;
       case 'return':
         if (pg.lowHand.length === 2) {
-          // Enter with 2 selected = confirm arrangement (same as 'd')
           confirmArrangement(state);
+          if (state.paigow.phase === 'result') startSpreadAnim(state, render);
         } else {
           toggleLowHand(state, pg.cursor);
         }
@@ -55,10 +64,14 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
           return;
         }
         confirmArrangement(state);
+        if (state.paigow.phase === 'result') startSpreadAnim(state, render);
         break;
       case 'c':
         pg.lowHand = [];
         pg.foulMessage = '';
+        break;
+      case 's':
+        cycleSortMode(pg);
         break;
       case 'k':
         pg.coloredSuits = !pg.coloredSuits;
@@ -78,13 +91,9 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
       deal(state);
       startSpreadAnim(state, render);
       return;
-    case 's': {
-      const modes = ['ascending', 'descending', 'unsorted'] as const;
-      const idx = modes.indexOf(pg.sortMode);
-      pg.sortMode = modes[(idx + 1) % modes.length]!;
-      state.message = `Sort: ${pg.sortMode}`;
+    case 's':
+      cycleSortMode(pg);
       return;
-    }
     case 'k':
       pg.coloredSuits = !pg.coloredSuits;
       return;
