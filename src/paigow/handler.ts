@@ -49,20 +49,14 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
         if (pg.lowHand.length === 2) {
           confirmArrangement(state);
           if (state.paigow.phase === 'result') startSpreadAnim(state, render);
-        } else {
+        } else if (pg.lowHand.length < 2) {
           toggleLowHand(state, pg.cursor);
+        } else {
+          state.message = 'Select exactly 2 cards for the low hand';
         }
         break;
       case 'a':
         autoArrange(state);
-        break;
-      case 'd':
-        if (pg.lowHand.length !== 2) {
-          state.message = 'Select exactly 2 cards for the low hand';
-          return;
-        }
-        confirmArrangement(state);
-        if (state.paigow.phase === 'result') startSpreadAnim(state, render);
         break;
       case 'c':
         pg.lowHand = [];

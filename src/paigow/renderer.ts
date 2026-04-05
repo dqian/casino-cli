@@ -671,7 +671,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
         { key: "←→", label: "Select card" },
         { key: "Space", label: "Toggle low" },
         { key: "a", label: "Auto-arrange" },
-        { key: "d", label: "Done" },
+        { key: "Enter", label: "Done" },
       ];
       right = [
         { key: "c", label: "Clear selection" },
