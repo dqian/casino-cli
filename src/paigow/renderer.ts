@@ -247,6 +247,28 @@ function renderCompactCardRow(cards: PaiGowCard[], faceDown: boolean = false): s
   return lines;
 }
 
+// Render high (5) and low (2) on one row: high left-aligned, gap, low right
+function renderSplitHandRow(high: PaiGowCard[], low: PaiGowCard[], faceDown: boolean = false): string[] {
+  const highImgs: string[][] = high.map(c => faceDown ? renderFaceDown() : renderCard(c));
+  const lowImgs: string[][] = low.map(c => faceDown ? renderFaceDown() : renderCard(c));
+  const gap = "     "; // 5-char gap between high and low
+  const lines: string[] = [];
+  for (let row = 0; row < CARD_H; row++) {
+    let line = "";
+    for (let i = 0; i < highImgs.length; i++) {
+      if (i > 0) line += " ";
+      line += highImgs[i]![row]!;
+    }
+    line += gap;
+    for (let i = 0; i < lowImgs.length; i++) {
+      if (i > 0) line += " ";
+      line += lowImgs[i]![row]!;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
 // --- Main screen renderer ---
 
 export function renderPaiGowScreen(state: AppState): string[] {
@@ -364,50 +386,38 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
 
 function renderResultPhase(lines: string[], state: AppState, pad: string, _width: number): void {
   const pg = state.paigow;
-
-  // Dealer's arranged hands
-  lines.push(`${pad}${t.gray}DEALER${t.reset}`);
-
   const nameW = 20;
+  const highLabel = `${t.cyan}High (5)${t.reset}`;
+  const lowLabel = `${t.cyan}Low  (2)${t.reset}`;
 
-  // Dealer high hand
+  // Dealer
   const dHighEval = evaluate5(pg.dealerHigh);
-  const dHighSorted = sortHandForDisplay(pg.dealerHigh);
-  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${dHighEval.name.padEnd(nameW)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}`);
-  const dealerHighCards = renderCompactCardRow(pg.dealerHigh);
-  for (const line of dealerHighCards) lines.push(`${pad}${line}`);
-
-  // Dealer low hand
   const dLowEval = evaluate2(pg.dealerLow);
+  const dHighSorted = sortHandForDisplay(pg.dealerHigh);
   const dLowSorted = sortHandForDisplay(pg.dealerLow);
-  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${dLowEval.name.padEnd(nameW)}${t.reset}${dLowSorted.map(c => cardShortFixed(c)).join("")}`);
-  const dealerLowCards = renderCompactCardRow(pg.dealerLow);
-  for (const line of dealerLowCards) lines.push(`${pad}${line}`);
+
+  lines.push(`${pad}${t.gray}DEALER${t.reset}`);
+  lines.push(`${pad}${highLabel}  ${t.brightWhite}${dHighEval.name.padEnd(nameW)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}     ${lowLabel}  ${t.brightWhite}${dLowEval.name}${t.reset}`);
+  const dealerRow = renderSplitHandRow(pg.dealerHigh, pg.dealerLow);
+  for (const line of dealerRow) lines.push(`${pad}${line}`);
   lines.push("");
 
-  // Player's arranged hands
-  const lowSet = new Set(pg.lowHand);
+  // Player
   const { high: pHigh, low: pLow } = getArrangedHands(pg);
   const pHighEval = evaluate5(pHigh);
   const pLowEval = evaluate2(pLow);
+  const pHighSorted = sortHandForDisplay(pHigh);
+  const pLowSorted = sortHandForDisplay(pLow);
+
+  const highCmp = pHighEval.value - dHighEval.value;
+  const lowCmp = pLowEval.value - dLowEval.value;
+  const highResult = highCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : highCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
+  const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
 
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
-
-  // Player high hand
-  const pHighSorted = sortHandForDisplay(pHigh);
-  const highCmp = pHighEval.value - dHighEval.value;
-  const highResult = highCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : highCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE (dealer)${t.reset}`;
-  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${pHighEval.name.padEnd(nameW)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")}  ${highResult}`);
-  const playerHighCards = renderCompactCardRow(pHigh);
-  for (const line of playerHighCards) lines.push(`${pad}${line}`);
-
-  // Player low hand
-  const pLowSorted = sortHandForDisplay(pLow);
-  const lowCmp = pLowEval.value - dLowEval.value;
-  const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE (dealer)${t.reset}`;
-  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${pLowEval.name.padEnd(nameW)}${t.reset}${pLowSorted.map(c => cardShortFixed(c)).join("")}  ${lowResult}`);
-  const playerLowCards = renderCompactCardRow(pLow);
-  for (const line of playerLowCards) lines.push(`${pad}${line}`);
+  lines.push(`${pad}${highLabel}  ${t.brightWhite}${pHighEval.name.padEnd(nameW)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")} ${highResult}  ${lowLabel}  ${t.brightWhite}${pLowEval.name}${t.reset}  ${lowResult}`);
+  const playerRow = renderSplitHandRow(pHigh, pLow);
+  for (const line of playerRow) lines.push(`${pad}${line}`);
   lines.push("");
 
   // Result
