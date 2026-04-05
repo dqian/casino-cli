@@ -301,26 +301,18 @@ export function renderPaiGowScreen(state: AppState): string[] {
 }
 
 function renderBettingPhase(lines: string[], state: AppState, pad: string): void {
-  const pg = state.paigow;
-
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
   lines.push("");
-  const dealerCards = renderCompactCardRow(
-    Array(7).fill(null).map(() => ({ rank: 'A' as const, suit: '♠' as const })),
-    true,
-  );
+  const dummyCards = Array(7).fill(null).map(() => ({ rank: 'A' as const, suit: '♠' as const }));
+  const dealerCards = renderCompactCardRow(dummyCards, true);
   for (const line of dealerCards) lines.push(`${pad}${line}`);
-  lines.push("");
   lines.push("");
 
   lines.push(`${pad}${t.gray}YOUR HAND${t.reset}`);
-  lines.push("");
-  const playerCards = renderCompactCardRow(
-    Array(7).fill(null).map(() => ({ rank: 'A' as const, suit: '♠' as const })),
-    true,
-  );
+  lines.push(""); // elevation placeholder (matches arranging phase row 0)
+  const playerCards = renderCompactCardRow(dummyCards, true);
   for (const line of playerCards) lines.push(`${pad}${line}`);
-  lines.push("");
+  lines.push(""); // cursor placeholder
 
   if (state.message) {
     lines.push(`${pad}${t.yellow}${state.message}${t.reset}`);
@@ -339,6 +331,7 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
 
   // Player's cards with selection UI
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}  ${t.gray}Select 2 cards for low hand${t.reset}`);
+  // renderCardRow adds elevation row at top + cursor row at bottom, matching betting layout
 
   const lowSet = new Set(pg.lowHand);
   const playerCardLines = renderCardRow(pg.playerCards, {
