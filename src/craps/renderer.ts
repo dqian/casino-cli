@@ -1,6 +1,6 @@
 import type { AppState, CrapsBet, CrapsBetKind, CrapsState } from "../types";
 import * as t from "../theme";
-import { renderHeader, renderHotkeySplit, type HotkeyItem } from "../shared/render";
+import { renderHeader, renderHotkeySplit, widthWarning, type HotkeyItem } from "../shared/render";
 import { BET_POSITIONS, totalBets, isBetAvailable, placePayoutStr, getBetPayoutInfo, canPlaceOdds } from "./game";
 
 // --- Dice rendering ---
@@ -207,6 +207,7 @@ function renderCell(
 
 const PLACE_W = 12;
 const INNER_W = 6 * PLACE_W + 5;  // 77
+const CRAPS_MIN_WIDTH = INNER_W + 4;    // 81: 2 pad + 2 outer borders + inner
 
 // Row structure widths (must total INNER_W):
 // Field:     77
@@ -508,6 +509,10 @@ export function renderCrapsScreen(state: AppState): string[] {
   // Header
   const rightContent = `${t.gray}Chip: $${cs.betAmount}${t.reset}  `;
   lines.push(...renderHeader("CRAPS", state.balance, width, rightContent));
+
+  // Width warning
+  const warn = widthWarning(width, CRAPS_MIN_WIDTH);
+  if (warn) lines.push(warn);
 
   // Point puck + phase indicator
   const puck = renderPuck(cs.point);
