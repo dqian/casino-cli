@@ -8,7 +8,8 @@ export function centerAnsi(text: string, width: number): string {
 
 export function widthWarning(width: number, minWidth: number): string | null {
   if (width >= minWidth) return null;
-  return `  ${t.yellow}${t.bold}\u26A0 Terminal too narrow (need ${minWidth} cols)${t.reset}`;
+  const pct = Math.ceil(((minWidth - width) / width) * 100);
+  return `  ${t.yellow}${t.bold}\u26A0 Window too narrow — expand +${pct}%${t.reset}`;
 }
 
 export function formatBalance(balance: number): string {
