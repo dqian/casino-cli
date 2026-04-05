@@ -1,7 +1,7 @@
 import type { AppState, Card, Rank } from "../types";
 import * as t from "../theme";
 import { baccaratHandValue } from "./game";
-import { renderHeader, renderHotkeySplit, sliceAnsi } from "../shared/render";
+import { renderHeader, renderHotkeySplit, sliceAnsi, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
 
 const CARD_H = 9;
@@ -173,6 +173,9 @@ export function renderBaccaratScreen(state: AppState): string[] {
 
   // Header
   lines.push(...renderHeader("BACCARAT", state.balance, width));
+
+  const warn = widthWarning(width, 60);
+  if (warn) lines.push(warn);
 
   // Shoe bar
   const totalShoe = bc.numDecks * 52;
