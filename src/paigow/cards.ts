@@ -1,9 +1,7 @@
 // Pai Gow Poker — deck creation, joker handling, poker hand evaluation
 
 import type { PaiGowCard, PokerHandEval, Rank, Suit } from "../types";
-
-const RANKS: Rank[] = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
-const SUITS: Suit[] = ['♠', '♥', '♦', '♣'];
+import { RANKS, SUITS, shuffle } from "../shared/cards";
 
 // Numeric rank value for comparison (ace high = 14)
 const RANK_VALUE: Record<string, number> = {
@@ -26,13 +24,6 @@ export function createPaiGowDeck(): PaiGowCard[] {
   cards.push({ rank: 'Joker', suit: 'wild' });
   shuffle(cards);
   return cards;
-}
-
-function shuffle(cards: PaiGowCard[]): void {
-  for (let i = cards.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [cards[i], cards[j]] = [cards[j]!, cards[i]!];
-  }
 }
 
 export function drawCards(deck: PaiGowCard[], n: number): PaiGowCard[] {
@@ -84,7 +75,7 @@ function isStraight(cards: PaiGowCard[]): boolean {
   return false;
 }
 
-function isConsecutiveDown(sorted: number[]): boolean {
+export function isConsecutiveDown(sorted: number[]): boolean {
   for (let i = 1; i < sorted.length; i++) {
     if (sorted[i - 1]! - sorted[i]! !== 1) return false;
   }
@@ -92,7 +83,7 @@ function isConsecutiveDown(sorted: number[]): boolean {
 }
 
 // Can 4 cards + 1 joker form a straight?
-function canFormStraightWithWild(sorted: number[]): boolean {
+export function canFormStraightWithWild(sorted: number[]): boolean {
   // sorted is desc, 4 values (joker removed)
   // Try inserting the joker at the best spot
   // The 4 cards must span at most 4 ranks (joker fills 1 gap)
@@ -117,7 +108,7 @@ function canFormStraightWithWild(sorted: number[]): boolean {
 }
 
 // Get the straight's high card (for comparison), assuming isStraight is true
-function getStraightHigh(cards: PaiGowCard[]): number {
+export function getStraightHigh(cards: PaiGowCard[]): number {
   const hasJoker = cards.some(isJoker);
   const values = getSortedValues(cards);
 
@@ -389,6 +380,15 @@ function pluralRank(v: number): string {
     case 2: return 'Twos';
     default: return `${v}s`;
   }
+}
+
+// Sort cards by rank descending (joker treated as ace)
+export function sortByRankDesc(cards: PaiGowCard[]): void {
+  cards.sort((a, b) => {
+    const va = isJoker(a) ? 14 : rankValue(a.rank);
+    const vb = isJoker(b) ? 14 : rankValue(b.rank);
+    return vb - va;
+  });
 }
 
 // Display name for a card

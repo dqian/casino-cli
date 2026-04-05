@@ -2,33 +2,16 @@
 
 import type { AppState, PaiGowCard, Rank } from "../types";
 import * as t from "../theme";
-import { renderHeader, renderHotkeySplit, widthWarning } from "../shared/render";
+import { renderHeader, renderHotkeySplit, widthWarning, sliceAnsi } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
+import {
+  CARD_H, INNER_W, renderStandardCard,
+  renderFaceDown, renderFaceBody,
+} from "../shared/cardRender";
 import { evaluate5, evaluate2, isJoker, rankValue } from "./cards";
-import { getArrangedHands, spreadProgress } from "./game";
-import { sliceAnsi as sliceAnsiShared } from "../shared/render";
+import { getArrangedHands, spreadProgress, sortProgress, getSortMaps } from "./game";
 
-const CARD_H = 9;
-const INNER_W = 9;
-const INNER_H = 7;
-
-// --- Pip layouts ---
-// Rows 1-5 are pip area, columns: left=1, center=4, right=7
-
-const PIP_LAYOUTS: Record<string, { c: number; r: number }[]> = {
-  'A':  [{c:4,r:3}],
-  '2':  [{c:4,r:1}, {c:4,r:5}],
-  '3':  [{c:4,r:1}, {c:4,r:3}, {c:4,r:5}],
-  '4':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:5}, {c:7,r:5}],
-  '5':  [{c:1,r:1}, {c:7,r:1}, {c:4,r:3}, {c:1,r:5}, {c:7,r:5}],
-  '6':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:1,r:5}, {c:7,r:5}],
-  '7':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:4,r:2}, {c:1,r:5}, {c:7,r:5}],
-  '8':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:3}, {c:7,r:3}, {c:4,r:2}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
-  '9':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:2}, {c:7,r:2}, {c:4,r:3}, {c:1,r:4}, {c:7,r:4}, {c:1,r:5}, {c:7,r:5}],
-  '10': [{c:1,r:1}, {c:7,r:1}, {c:4,r:2}, {c:1,r:2}, {c:7,r:2}, {c:1,r:4}, {c:7,r:4}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
-};
-
-// 4-color suit mapping: ♠=white, ♥=red, ♦=blue, ♣=green
+// 4-color suit mapping: ♠=lavender, ♥=red, ♦=blue, ♣=green
 function suitColor4(suit: string): string {
   switch (suit) {
     case '♠': return t.fg256(147);  // lavender
@@ -43,81 +26,13 @@ function suitColor2(suit: string): string {
   return (suit === '♥' || suit === '♦') ? t.brightRed : t.brightWhite;
 }
 
-// Set by renderPaiGowScreen before card rendering
+// Set by renderPaiGowScreen before rendering — avoids threading through every function
 let getSuitColor: (suit: string) => string = suitColor4;
 
 // Fixed column widths for hand detail display
 const LABEL_W = 10; // "High (5): " or "Low  (2): "
-const NAME_W = 32;  // hand description padded
 
-// --- Card rendering ---
-
-function renderPipBody(clr: string, suit: string, rank: Rank): string[] {
-  const pips = PIP_LAYOUTS[rank] ?? [];
-  const pipSet = new Set(pips.map(p => `${p.r},${p.c}`));
-  const rows: string[] = [];
-  for (let row = 1; row <= 5; row++) {
-    let line = "";
-    for (let col = 0; col < INNER_W; col++) {
-      if (pipSet.has(`${row},${col}`)) {
-        line += `${clr}${t.bold}${suit}${t.reset}`;
-      } else {
-        line += " ";
-      }
-    }
-    rows.push(line);
-  }
-  return rows;
-}
-
-function renderFaceBody(clr: string, suit: string, rank: string): string[] {
-  return [
-    `  ${clr}╭───╮${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${suit}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${rank}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}${suit}${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}╰───╯${t.reset}  `,
-  ];
-}
-
-function renderJokerBody(): string[] {
-  const clr = t.fg256(213); // magenta/pink
-  return [
-    `  ${clr}╭───╮${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}★${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}J${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}│${t.reset} ${clr}${t.bold}★${t.reset} ${clr}│${t.reset}  `,
-    `  ${clr}╰───╯${t.reset}  `,
-  ];
-}
-
-function renderCard(card: PaiGowCard): string[] {
-  if (isJoker(card)) {
-    return renderJokerCard();
-  }
-
-  const clr = getSuitColor(card.suit as string);
-  const s = card.suit as string;
-  const r = card.rank as Rank;
-
-  const topLabel = `${r}${s}`;
-  const topLine = `${clr}${t.bold}${topLabel}${t.reset}${" ".repeat(INNER_W - topLabel.length)}`;
-
-  const botLabel = `${s}${r}`;
-  const botLine = `${" ".repeat(INNER_W - botLabel.length)}${clr}${t.bold}${botLabel}${t.reset}`;
-
-  const bodyRows = (r === 'J' || r === 'Q' || r === 'K')
-    ? renderFaceBody(clr, s, r)
-    : renderPipBody(clr, s, r);
-
-  const lines: string[] = [];
-  lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
-  lines.push(`${t.gray}│${t.reset}${topLine}${t.gray}│${t.reset}`);
-  for (const row of bodyRows) lines.push(`${t.gray}│${t.reset}${row}${t.gray}│${t.reset}`);
-  lines.push(`${t.gray}│${t.reset}${botLine}${t.gray}│${t.reset}`);
-  lines.push(`${t.gray}└${"─".repeat(INNER_W)}┘${t.reset}`);
-  return lines;
-}
+// --- Card rendering (delegates to shared, adds joker support) ---
 
 function renderJokerCard(): string[] {
   const clr = t.fg256(213); // magenta/pink
@@ -126,7 +41,7 @@ function renderJokerCard(): string[] {
   const botLabel = `★J`;
   const botLine = `${" ".repeat(INNER_W - botLabel.length)}${clr}${t.bold}${botLabel}${t.reset}`;
 
-  const bodyRows = renderJokerBody();
+  const bodyRows = renderFaceBody(clr, '★', 'J');
 
   const lines: string[] = [];
   lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
@@ -137,19 +52,9 @@ function renderJokerCard(): string[] {
   return lines;
 }
 
-function renderFaceDown(): string[] {
-  const backClr = t.fg256(24);
-  const lines: string[] = [];
-  lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
-  for (let r = 0; r < INNER_H; r++) {
-    let pattern = "";
-    for (let c = 0; c < INNER_W; c++) {
-      pattern += (r + c) % 2 === 0 ? "░" : "▒";
-    }
-    lines.push(`${t.gray}│${t.reset}${backClr}${pattern}${t.reset}${t.gray}│${t.reset}`);
-  }
-  lines.push(`${t.gray}└${"─".repeat(INNER_W)}┘${t.reset}`);
-  return lines;
+function renderCard(card: PaiGowCard): string[] {
+  if (isJoker(card)) return renderJokerCard();
+  return renderStandardCard(card.rank as Rank, card.suit as string, getSuitColor(card.suit as string));
 }
 
 // Render a highlighted card (selected for low hand) — shift border to yellow
@@ -278,7 +183,7 @@ function renderSpreadingCards(
       }
 
       if (visW > 0) {
-        line += sliceAnsiShared(cardImgs[i]![row]!, 0, visW);
+        line += sliceAnsi(cardImgs[i]![row]!, 0, visW);
         pos = offset + visW;
       }
     }
@@ -321,7 +226,7 @@ function renderSpreadingSplitHand(
       }
 
       if (visW > 0) {
-        line += sliceAnsiShared(cardImgs[i]![row]!, 0, visW);
+        line += sliceAnsi(cardImgs[i]![row]!, 0, visW);
         pos = offset + visW;
       }
     }
@@ -383,7 +288,7 @@ function renderRearrangingCards(
       }
 
       if (visW > 0) {
-        line += sliceAnsiShared(cardImgs[items[i]!.cardIdx]![row]!, 0, visW);
+        line += sliceAnsi(cardImgs[items[i]!.cardIdx]![row]!, 0, visW);
         pos = offset + visW;
       }
     }
@@ -410,6 +315,74 @@ function renderSplitHandRow(high: PaiGowCard[], low: PaiGowCard[], faceDown: boo
       line += lowImgs[i]![row]!;
     }
     lines.push(line);
+  }
+  return lines;
+}
+
+// --- Sort animation rendering ---
+
+// Render a group of cards sliding from old positions to new positions
+function renderSortingGroup(
+  cards: PaiGowCard[],
+  sortMap: number[],  // sortMap[newIdx] = oldIdx
+  progress: number,
+  highlighted?: Set<number>,
+): string[] {
+  const SLOT = 12;
+
+  // Compute interpolated position for each card
+  const items: { newIdx: number; pos: number }[] = [];
+  for (let i = 0; i < cards.length; i++) {
+    const oldPos = sortMap[i]! * SLOT;
+    const newPos = i * SLOT;
+    items.push({ newIdx: i, pos: Math.floor(oldPos + (newPos - oldPos) * progress) });
+  }
+  items.sort((a, b) => a.pos - b.pos);
+
+  const cardImgs = cards.map((c, i) =>
+    highlighted?.has(i) ? renderCardHighlighted(c) : renderCard(c)
+  );
+
+  const lines: string[] = [];
+  for (let row = 0; row < CARD_H; row++) {
+    let line = "";
+    let pos = 0;
+    for (let i = 0; i < items.length; i++) {
+      const offset = items[i]!.pos;
+      const nextOffset = i < items.length - 1 ? items[i + 1]!.pos : offset + 11;
+      const visW = Math.min(11, Math.max(0, nextOffset - offset));
+      if (offset > pos) {
+        line += " ".repeat(offset - pos);
+        pos = offset;
+      }
+      if (visW > 0) {
+        line += sliceAnsi(cardImgs[items[i]!.newIdx]![row]!, 0, visW);
+        pos = offset + visW;
+      }
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+
+// Render a 5+gap+2 split hand with sort animation within each group
+function renderSortingSplitHand(
+  high: PaiGowCard[], low: PaiGowCard[],
+  highMap: number[], lowMap: number[],
+  progress: number,
+): string[] {
+  const highLines = renderSortingGroup(high, highMap, progress);
+  const lowLines = renderSortingGroup(low, lowMap, progress);
+
+  const HIGH_W = 4 * 12 + 11; // 59 — fixed width for 5-card group
+  const gap = "     ";
+
+  const lines: string[] = [];
+  for (let row = 0; row < CARD_H; row++) {
+    const hLine = highLines[row] || "";
+    const lLine = lowLines[row] || "";
+    const hVis = t.stripAnsi(hLine).length;
+    lines.push(hLine + " ".repeat(Math.max(0, HIGH_W - hVis)) + gap + lLine);
   }
   return lines;
 }
@@ -467,8 +440,9 @@ function renderBettingPhase(lines: string[], state: AppState, pad: string): void
 function renderArrangingPhase(lines: string[], state: AppState, pad: string): void {
   const pg = state.paigow;
 
-  const progress = spreadProgress(pg);
-  const isAnimating = pg.spreadFrame > 0;
+  const isSpreadAnim = pg.spreadFrame > 0;
+  const isSortAnim = pg.sortFrame > 0;
+  const isAnyAnim = isSpreadAnim || isSortAnim;
 
   // Dealer — face down (no animation, always static)
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
@@ -478,12 +452,18 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
   lines.push("");
 
   // Player's cards with selection UI
-  lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}${isAnimating ? "" : `  ${t.gray}Select 2 cards for low hand${t.reset}`}`);
-  // renderCardRow adds elevation row at top + cursor row at bottom, matching betting layout
+  lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}${isAnyAnim ? "" : `  ${t.gray}Select 2 cards for low hand${t.reset}`}`);
 
-  if (isAnimating) {
+  if (isSpreadAnim) {
     lines.push(""); // elevation placeholder
-    const playerCards = renderSpreadingCards(pg.playerCards, progress, false);
+    const playerCards = renderSpreadingCards(pg.playerCards, spreadProgress(pg), false);
+    for (const line of playerCards) lines.push(`${pad}${line}`);
+    lines.push(""); // cursor placeholder
+  } else if (isSortAnim) {
+    const maps = getSortMaps();
+    const lowSet = new Set(pg.lowHand);
+    lines.push(""); // elevation placeholder
+    const playerCards = renderSortingGroup(pg.playerCards, maps?.playerCards ?? [], sortProgress(pg), lowSet);
     for (const line of playerCards) lines.push(`${pad}${line}`);
     lines.push(""); // cursor placeholder
   } else {
@@ -557,17 +537,26 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
     return `${pad}${highRes}${" ".repeat(gap)}${lowRes}`;
   }
 
-  const isAnimating = pg.spreadFrame > 0;
-  const progress = spreadProgress(pg);
+  const isSpreadAnim = pg.spreadFrame > 0;
+  const isSortAnim = pg.sortFrame > 0;
 
   // Dealer
   const dHighEval = evaluate5(pg.dealerHigh);
   const dLowEval = evaluate2(pg.dealerLow);
 
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
-  if (isAnimating) {
+  if (isSpreadAnim) {
     lines.push(""); // placeholder for info line during animation
-    const dealerRow = renderSpreadingSplitHand(pg.dealerHigh, pg.dealerLow, progress);
+    const dealerRow = renderSpreadingSplitHand(pg.dealerHigh, pg.dealerLow, spreadProgress(pg));
+    for (const line of dealerRow) lines.push(`${pad}${line}`);
+  } else if (isSortAnim) {
+    const maps = getSortMaps();
+    lines.push(handInfoLine(dHighEval.name, dLowEval.name));
+    const dealerRow = renderSortingSplitHand(
+      pg.dealerHigh, pg.dealerLow,
+      maps?.dealerHigh ?? [], maps?.dealerLow ?? [],
+      sortProgress(pg),
+    );
     for (const line of dealerRow) lines.push(`${pad}${line}`);
   } else {
     lines.push(handInfoLine(dHighEval.name, dLowEval.name));
@@ -587,11 +576,21 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
 
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
-  if (isAnimating) {
+  if (isSpreadAnim) {
     lines.push("");
-    const playerRow = renderRearrangingCards(pg.playerCards, pg.lowHand, progress);
+    const playerRow = renderRearrangingCards(pg.playerCards, pg.lowHand, spreadProgress(pg));
     for (const line of playerRow) lines.push(`${pad}${line}`);
     lines.push("");
+  } else if (isSortAnim) {
+    const maps = getSortMaps();
+    lines.push(handInfoLine(pHighEval.name, pLowEval.name));
+    const playerRow = renderSortingSplitHand(
+      pHigh, pLow,
+      maps?.playerHigh ?? [], maps?.playerLow ?? [],
+      sortProgress(pg),
+    );
+    for (const line of playerRow) lines.push(`${pad}${line}`);
+    lines.push(resultLine(highResult, lowResult));
   } else {
     lines.push(handInfoLine(pHighEval.name, pLowEval.name));
     const playerRow = renderSplitHandRow(pHigh, pLow);

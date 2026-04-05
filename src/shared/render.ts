@@ -66,6 +66,24 @@ export function renderHotkeySplit(
   return gridLines;
 }
 
+// Step bet amount up or down through standard increments: 1, 5, 10, 25, 50, then +25
+export function stepBet(current: number, dir: 'up' | 'down'): number {
+  if (dir === 'up') {
+    if (current < 5) return 5;
+    if (current < 10) return 10;
+    if (current < 25) return 25;
+    if (current < 50) return 50;
+    return current + 25;
+  } else {
+    if (current > 50) return current - 25;
+    if (current > 25) return 25;
+    if (current > 10) return 10;
+    if (current > 5) return 5;
+    if (current > 1) return 1;
+    return current;
+  }
+}
+
 // Slice an ANSI-colored string by visual character positions [start, end)
 export function sliceAnsi(str: string, start: number, end: number): string {
   let result = "";

@@ -6,6 +6,7 @@ import {
   animateHit, animateDouble, skipCardAnim,
   takeInsurance, declineInsurance,
 } from "./game";
+import { stepBet } from "../shared/render";
 
 export function handleBlackjackKey(state: AppState, key: KeyEvent, render: () => void): void {
   const bj = state.blackjack;
@@ -105,19 +106,11 @@ export function handleBlackjackKey(state: AppState, key: KeyEvent, render: () =>
       return;
     case "up":
     case "right":
-      if (bj.betAmount < 5) bj.betAmount = 5;
-      else if (bj.betAmount < 10) bj.betAmount = 10;
-      else if (bj.betAmount < 25) bj.betAmount = 25;
-      else if (bj.betAmount < 50) bj.betAmount = 50;
-      else bj.betAmount += 25;
+      bj.betAmount = stepBet(bj.betAmount, 'up');
       break;
     case "down":
     case "left":
-      if (bj.betAmount > 50) bj.betAmount -= 25;
-      else if (bj.betAmount > 25) bj.betAmount = 25;
-      else if (bj.betAmount > 10) bj.betAmount = 10;
-      else if (bj.betAmount > 5) bj.betAmount = 5;
-      else if (bj.betAmount > 1) bj.betAmount = 1;
+      bj.betAmount = stepBet(bj.betAmount, 'down');
       break;
     case "q":
     case "escape":

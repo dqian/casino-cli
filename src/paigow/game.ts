@@ -1,10 +1,10 @@
 // Pai Gow Poker — game logic: deal, arrange, house way, compare
 
-import type { AppState, PaiGowCard, PaiGowState } from "../types";
-import type { PaiGowSortMode } from "../types";
+import type { AppState, PaiGowCard, PaiGowState, PaiGowSortMode } from "../types";
 import {
   createPaiGowDeck, drawCards, evaluate5, evaluate2,
   compareHands, isValidArrangement, isJoker, rankValue,
+  sortByRankDesc, isConsecutiveDown, canFormStraightWithWild,
 } from "./cards";
 
 // --- State factory ---
@@ -26,6 +26,7 @@ export function createPaiGowState(options?: AppState["options"]): PaiGowState {
     sortMode: options?.paigow.defaultSort ?? 'descending',
     coloredSuits: options?.paigow.coloredSuits ?? true,
     spreadFrame: 0,
+    sortFrame: 0,
   };
 }
 
@@ -120,6 +121,114 @@ export function spreadProgress(pg: PaiGowState): number {
   if (pg.spreadFrame <= 0) return 1;
   const t = Math.min(1, pg.spreadFrame / SPREAD_FRAMES);
   return 1 - Math.pow(1 - t, 2); // ease-out
+}
+
+// --- Sort animation ---
+
+const SORT_FRAMES = 8;
+const SORT_DELAY = 33;
+let sortGen = 0;
+
+// Sort maps: for each card in the NEW order, what was its index in the OLD order
+// Stored module-level to avoid bloating state type
+export interface SortMaps {
+  playerCards?: number[];   // arranging phase: 7 elements
+  playerHigh?: number[];    // result phase: 5 elements
+  playerLow?: number[];     // result phase: 2 elements
+  dealerHigh?: number[];    // result phase: 5 elements
+  dealerLow?: number[];     // result phase: 2 elements
+}
+let sortMaps: SortMaps | null = null;
+export function getSortMaps(): SortMaps | null { return sortMaps; }
+
+export function sortProgress(pg: PaiGowState): number {
+  if (pg.sortFrame <= 0) return 1;
+  const t = Math.min(1, pg.sortFrame / SORT_FRAMES);
+  return 1 - Math.pow(1 - t, 2); // ease-out
+}
+
+// Build an index map: for each card in newCards, find its old index by reference identity
+function computeSortMap(oldCards: PaiGowCard[], newCards: PaiGowCard[]): number[] {
+  const map: number[] = [];
+  const used = new Set<number>();
+  for (const card of newCards) {
+    for (let i = 0; i < oldCards.length; i++) {
+      if (!used.has(i) && oldCards[i] === card) {
+        map.push(i);
+        used.add(i);
+        break;
+      }
+    }
+  }
+  return map;
+}
+
+function isIdentityMap(map: number[]): boolean {
+  return map.every((v, i) => v === i);
+}
+
+export function startSortAnim(state: AppState, render: () => void): void {
+  const pg = state.paigow;
+  if (pg.spreadFrame > 0 || pg.sortFrame > 0) return;
+
+  // Capture old card orders (by reference)
+  const oldPlayerCards = [...pg.playerCards];
+  let oldArranged: { high: PaiGowCard[]; low: PaiGowCard[] } | null = null;
+  let oldDealerHigh: PaiGowCard[] = [];
+  let oldDealerLow: PaiGowCard[] = [];
+  if (pg.phase === 'result') {
+    oldArranged = getArrangedHands(pg);
+    oldDealerHigh = [...pg.dealerHigh];
+    oldDealerLow = [...pg.dealerLow];
+  }
+
+  // Toggle sort and apply
+  pg.sortMode = pg.sortMode === 'ascending' ? 'descending' : 'ascending';
+  resortPlayerCards(pg);
+
+  // Compute sort maps and check for actual movement
+  let hasMovement = false;
+  const maps: SortMaps = {};
+
+  if (pg.phase === 'arranging') {
+    maps.playerCards = computeSortMap(oldPlayerCards, pg.playerCards);
+    hasMovement = !isIdentityMap(maps.playerCards);
+  } else if (pg.phase === 'result') {
+    const newArranged = getArrangedHands(pg);
+    maps.playerHigh = computeSortMap(oldArranged!.high, newArranged.high);
+    maps.playerLow = computeSortMap(oldArranged!.low, newArranged.low);
+    maps.dealerHigh = computeSortMap(oldDealerHigh, pg.dealerHigh);
+    maps.dealerLow = computeSortMap(oldDealerLow, pg.dealerLow);
+    hasMovement = !isIdentityMap(maps.playerHigh) || !isIdentityMap(maps.playerLow) ||
+                  !isIdentityMap(maps.dealerHigh) || !isIdentityMap(maps.dealerLow);
+  }
+
+  if (!hasMovement) return; // nothing moved, skip animation
+
+  sortMaps = maps;
+  pg.sortFrame = 1;
+  const gen = ++sortGen;
+
+  const step = () => {
+    if (gen !== sortGen || pg.sortFrame <= 0) return;
+    pg.sortFrame++;
+    if (pg.sortFrame > SORT_FRAMES) {
+      pg.sortFrame = 0;
+      sortMaps = null;
+      render();
+      return;
+    }
+    render();
+    setTimeout(step, SORT_DELAY);
+  };
+  render();
+  setTimeout(step, SORT_DELAY);
+}
+
+export function skipSortAnim(state: AppState): void {
+  sortGen++;
+  state.paigow.sortFrame = 0;
+  sortMaps = null;
 }
 
 // --- Toggle a card into/out of the low hand ---
@@ -256,19 +365,35 @@ export function newRound(state: AppState): void {
   pg.winAmount = 0;
   pg.resultMessage = '';
   pg.foulMessage = '';
+  pg.sortFrame = 0;
   state.message = '';
 }
 
 // --- House Way (simplified) ---
 // The house way determines how the dealer (and auto-arrange) splits 7 cards
 
+// Collect remaining cards (excluding joker and specified ranks), prepend joker if present
+function collectRest(sorted: PaiGowCard[], hasJoker: boolean, ...excludeRanks: number[]): PaiGowCard[] {
+  const excludeSet = new Set(excludeRanks);
+  const rest = sorted.filter(c => !isJoker(c) && !excludeSet.has(rankValue(c.rank)));
+  const joker = hasJoker ? sorted.find(isJoker) : null;
+  if (joker) rest.unshift(joker);
+  sortByRankDesc(rest);
+  return rest;
+}
+
+// Fill high hand to 5 cards from a filler array
+function fillHigh(base: PaiGowCard[], filler: PaiGowCard[]): PaiGowCard[] {
+  const high = [...base];
+  while (high.length < 5 && filler.length > 0) {
+    high.push(filler.shift()!);
+  }
+  return high;
+}
+
 export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGowCard[] } {
-  // Sort cards by rank value descending (joker treated as ace for sorting)
-  const sorted = [...cards].sort((a, b) => {
-    const va = isJoker(a) ? 14 : rankValue(a.rank);
-    const vb = isJoker(b) ? 14 : rankValue(b.rank);
-    return vb - va;
-  });
+  const sorted = [...cards];
+  sortByRankDesc(sorted);
 
   // Analyze the hand
   const hasJoker = sorted.some(isJoker);
@@ -314,14 +439,7 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
   if (quads.length > 0) {
     const quadVal = quads[0]!;
     const quadCards = groups.get(quadVal)!;
-    const rest = sorted.filter(c => !isJoker(c) && rankValue(c.rank) !== quadVal);
-    const joker = hasJoker ? sorted.find(isJoker) : null;
-    if (joker) rest.unshift(joker);
-    rest.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    const rest = collectRest(sorted, hasJoker, quadVal);
 
     if (quadVal >= 11) {
       // Split high quads: pair in high, pair in low
@@ -348,17 +466,9 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
     const joker = hasJoker ? sorted.find(isJoker) : null;
 
     const low = [pairCards[0]!, pairCards[1]!];
-    const highBase = [...tripCards];
     const filler = joker ? [joker, ...rest] : rest;
-    filler.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
-    while (highBase.length < 5 && filler.length > 0) {
-      highBase.push(filler.shift()!);
-    }
-    return { high: highBase, low };
+    sortByRankDesc(filler);
+    return { high: fillHigh([...tripCards], filler), low };
   }
 
   // Two trips (rare): top trip in high, split second trip — pair in low
@@ -370,31 +480,16 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
     );
     const joker = hasJoker ? sorted.find(isJoker) : null;
     const low = [t2[0]!, t2[1]!]; // pair from second trip
-    const highBase = [...t1, t2[2]!];
     const filler = joker ? [joker, ...rest] : rest;
-    filler.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
-    while (highBase.length < 5 && filler.length > 0) {
-      highBase.push(filler.shift()!);
-    }
-    return { high: highBase, low };
+    sortByRankDesc(filler);
+    return { high: fillHigh([...t1, t2[2]!], filler), low };
   }
 
   // Three of a kind (no pair alongside)
   if (trips.length === 1) {
     const tripVal = trips[0]!;
     const tripCards = groups.get(tripVal)!;
-    const rest = sorted.filter(c => !isJoker(c) && rankValue(c.rank) !== tripVal);
-    const joker = hasJoker ? sorted.find(isJoker) : null;
-    if (joker) rest.unshift(joker);
-    rest.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    const rest = collectRest(sorted, hasJoker, tripVal);
 
     if (tripVal === 14) {
       // Split aces: pair in high, one ace + best kicker in low
@@ -417,11 +512,7 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
     const joker = hasJoker ? sorted.find(isJoker) : null;
     const low = [topPairCards[0]!, topPairCards[1]!];
     const filler = joker ? [joker, ...rest] : rest;
-    filler.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    sortByRankDesc(filler);
     return { high: filler.slice(0, 5), low };
   }
 
@@ -431,21 +522,10 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
     const p2 = pairs[1]!; // lower pair
     const p1Cards = groups.get(p1)!;
     const p2Cards = groups.get(p2)!;
-    const rest = sorted.filter(c =>
-      !isJoker(c) && rankValue(c.rank) !== p1 && rankValue(c.rank) !== p2
-    );
-    const joker = hasJoker ? sorted.find(isJoker) : null;
-    if (joker) rest.unshift(joker);
-    rest.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    const rest = collectRest(sorted, hasJoker, p1, p2);
 
     // Split if top pair is aces or both pairs are JJ+
     if (p1 >= 14 || (p1 >= 11 && p2 >= 11)) {
-      // Split: higher pair in high, lower pair in low
-      // Actually: lower pair goes to low, higher pair stays in high
       const low = [p2Cards[0]!, p2Cards[1]!];
       const high = [...p1Cards, rest[0]!, rest[1]!, rest[2]!];
       return { high, low };
@@ -461,14 +541,7 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
   if (pairs.length === 1) {
     const pairVal = pairs[0]!;
     const pairCards = groups.get(pairVal)!;
-    const rest = sorted.filter(c => !isJoker(c) && rankValue(c.rank) !== pairVal);
-    const joker = hasJoker ? sorted.find(isJoker) : null;
-    if (joker) rest.unshift(joker);
-    rest.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    const rest = collectRest(sorted, hasJoker, pairVal);
 
     // Pair in high, two highest remaining in low
     const low = [rest[0]!, rest[1]!];
@@ -480,11 +553,7 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
   if (straightCards) {
     const straightSet = new Set(straightCards);
     const rest = sorted.filter(c => !straightSet.has(c));
-    rest.sort((a, b) => {
-      const va = isJoker(a) ? 14 : rankValue(a.rank);
-      const vb = isJoker(b) ? 14 : rankValue(b.rank);
-      return vb - va;
-    });
+    sortByRankDesc(rest);
     if (rest.length >= 2) {
       return { high: straightCards, low: [rest[0]!, rest[1]!] };
     }
@@ -495,26 +564,17 @@ export function houseWay(cards: PaiGowCard[]): { high: PaiGowCard[]; low: PaiGow
     if (flushCards.length >= 5) {
       const best5 = flushCards.slice(0, 5);
       const rest = sorted.filter(c => !best5.includes(c));
-      rest.sort((a, b) => {
-        const va = isJoker(a) ? 14 : rankValue(a.rank);
-        const vb = isJoker(b) ? 14 : rankValue(b.rank);
-        return vb - va;
-      });
+      sortByRankDesc(rest);
       if (rest.length >= 2) {
         return { high: best5, low: [rest[0]!, rest[1]!] };
       }
     }
   }
 
-  // No pair: highest card in high, next two highest in low
-  const low = [sorted[0]!, sorted[1]!];
-  const high = sorted.slice(2, 7);
-  // Wait — house way says: highest card in high hand, next two highest in low hand
-  // But we need 5 in high and 2 in low. "Highest card in high hand" means
-  // the high hand should contain the best card. Put 2nd and 3rd highest in low.
-  const lowHW = [sorted[1]!, sorted[2]!];
-  const highHW = [sorted[0]!, ...sorted.slice(3, 7)];
-  return { high: highHW, low: lowHW };
+  // No pair: 2nd and 3rd highest in low, rest in high
+  const low = [sorted[1]!, sorted[2]!];
+  const high = [sorted[0]!, ...sorted.slice(3, 7)];
+  return { high, low };
 }
 
 // Find a suit that appears 5+ times (for flush detection)
@@ -536,10 +596,8 @@ function findBestStraight(cards: PaiGowCard[]): PaiGowCard[] | null {
   const hasJoker = cards.some(isJoker);
   const nonJoker = cards.filter(c => !isJoker(c));
 
-  // Try all 5-card combos from 7 to find a straight
-  // (We'll pick the highest one)
   const indices = hasJoker
-    ? combosFromIndices(nonJoker.length, 4) // 4 from non-joker + joker
+    ? combosFromIndices(nonJoker.length, 4)
     : combosFromIndices(nonJoker.length, 5);
 
   let bestStraight: PaiGowCard[] | null = null;
@@ -552,28 +610,26 @@ function findBestStraight(cards: PaiGowCard[]): PaiGowCard[] | null {
     const vals = hand.filter(c => !isJoker(c)).map(c => rankValue(c.rank)).sort((a, b) => b - a);
 
     if (hasJoker) {
-      if (canFormStraightWith4(vals)) {
-        const high = getHighOf4WithWild(vals);
+      if (canFormStraightWithWild(vals)) {
+        const high = getHighOfWildStraight(vals);
         if (high > bestHigh) {
           bestHigh = high;
           bestStraight = hand;
         }
       }
     } else {
-      if (vals.length === 5 && isConsec(vals)) {
+      if (vals.length === 5 && isConsecutiveDown(vals)) {
         if (vals[0]! > bestHigh) {
           bestHigh = vals[0]!;
           bestStraight = hand;
         }
       }
-      // Check wheel
+      // Check wheel (A-2-3-4-5)
       if (vals.length === 5 && vals[0] === 14) {
-        const low = [5, ...vals.slice(1)].sort((a, b) => b - a);
-        if (isConsec(low)) {
-          if (5 > bestHigh) {
-            bestHigh = 5;
-            bestStraight = hand;
-          }
+        const lowAce = [5, ...vals.slice(1)].sort((a, b) => b - a);
+        if (isConsecutiveDown(lowAce) && 5 > bestHigh) {
+          bestHigh = 5;
+          bestStraight = hand;
         }
       }
     }
@@ -582,28 +638,8 @@ function findBestStraight(cards: PaiGowCard[]): PaiGowCard[] | null {
   return bestStraight;
 }
 
-function isConsec(sorted: number[]): boolean {
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i - 1]! - sorted[i]! !== 1) return false;
-  }
-  return true;
-}
-
-function canFormStraightWith4(sorted: number[]): boolean {
-  if (sorted.length !== 4) return false;
-  const candidates: number[][] = [sorted];
-  if (sorted[0] === 14) {
-    candidates.push([...sorted.slice(1), 1].sort((a, b) => b - a));
-  }
-  for (const vals of candidates) {
-    const high = vals[0]!;
-    const low = vals[vals.length - 1]!;
-    if (high - low <= 4 && new Set(vals).size === vals.length) return true;
-  }
-  return false;
-}
-
-function getHighOf4WithWild(sorted: number[]): number {
+// Get the high card of a 4-value straight with wild card
+function getHighOfWildStraight(sorted: number[]): number {
   const candidates: number[][] = [sorted];
   if (sorted[0] === 14) {
     candidates.push([...sorted.slice(1), 1].sort((a, b) => b - a));

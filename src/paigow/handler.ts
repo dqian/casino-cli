@@ -2,7 +2,12 @@
 
 import type { AppState, PaiGowState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { deal, toggleLowHand, autoArrange, confirmArrangement, newRound, startSpreadAnim, skipSpreadAnim, resortPlayerCards } from "./game";
+import {
+  deal, toggleLowHand, autoArrange, confirmArrangement, newRound,
+  startSpreadAnim, skipSpreadAnim, startSortAnim, skipSortAnim,
+  resortPlayerCards,
+} from "./game";
+import { stepBet } from "../shared/render";
 
 function cycleSortMode(pg: PaiGowState): void {
   pg.sortMode = pg.sortMode === 'ascending' ? 'descending' : 'ascending';
@@ -20,12 +25,20 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
     return;
   }
 
+  // Sort animation: Enter skips
+  if (pg.sortFrame > 0) {
+    if (key.name === 'return') {
+      skipSortAnim(state);
+    }
+    return;
+  }
+
   // Result phase
   if (pg.phase === 'result') {
     if (key.name === 'return') {
       newRound(state);
     } else if (key.name === 's') {
-      cycleSortMode(pg);
+      startSortAnim(state, render);
     } else if (key.name === 'q' || key.name === 'escape') {
       state.screen = 'menu';
       state.message = '';
@@ -63,7 +76,7 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
         pg.foulMessage = '';
         break;
       case 's':
-        cycleSortMode(pg);
+        startSortAnim(state, render);
         break;
       case 'k':
         pg.coloredSuits = !pg.coloredSuits;
@@ -77,7 +90,7 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
     return;
   }
 
-  // Betting phase
+  // Betting phase (no cards to animate — instant sort)
   switch (key.name) {
     case 'return':
       deal(state);
@@ -91,19 +104,11 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, render: () => vo
       return;
     case 'up':
     case 'right':
-      if (pg.betAmount < 5) pg.betAmount = 5;
-      else if (pg.betAmount < 10) pg.betAmount = 10;
-      else if (pg.betAmount < 25) pg.betAmount = 25;
-      else if (pg.betAmount < 50) pg.betAmount = 50;
-      else pg.betAmount += 25;
+      pg.betAmount = stepBet(pg.betAmount, 'up');
       break;
     case 'down':
     case 'left':
-      if (pg.betAmount > 50) pg.betAmount -= 25;
-      else if (pg.betAmount > 25) pg.betAmount = 25;
-      else if (pg.betAmount > 10) pg.betAmount = 10;
-      else if (pg.betAmount > 5) pg.betAmount = 5;
-      else if (pg.betAmount > 1) pg.betAmount = 1;
+      pg.betAmount = stepBet(pg.betAmount, 'down');
       break;
     case 'q':
     case 'escape':

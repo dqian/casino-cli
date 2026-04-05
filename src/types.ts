@@ -176,6 +176,7 @@ export interface PaiGowState {
   sortMode: PaiGowSortMode;
   coloredSuits: boolean;
   spreadFrame: number;          // 0 = no anim, >0 = spreading cards
+  sortFrame: number;            // 0 = no anim, >0 = sort animation
 }
 
 // Game module interface — each game implements this for TUI dispatch
