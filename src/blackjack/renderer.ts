@@ -3,9 +3,7 @@ import * as t from "../theme";
 import { handValue, isBlackjack, hiLoValue } from "./deck";
 import { canSplit, canDouble } from "./game";
 import { getBasicStrategyHint } from "./strategy";
-import { renderHeader } from "../shared/render";
-import { sliceAnsi } from "../shared/render";
-import { renderHotkeySplit } from "../shared/render";
+import { renderHeader, sliceAnsi, renderHotkeySplit, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
 
 const CARD_H = 9;
@@ -237,6 +235,9 @@ export function renderBlackjackScreen(state: AppState): string[] {
 
   // Header
   lines.push(...renderHeader("BLACKJACK", state.balance, width));
+
+  const warn = widthWarning(width, 60);
+  if (warn) lines.push(warn);
 
   // Shoe bar — depleting bar with yellow cut card, stretches full width
   const totalShoe = bj.numDecks * 52;

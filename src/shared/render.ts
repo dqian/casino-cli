@@ -6,6 +6,11 @@ export function centerAnsi(text: string, width: number): string {
   return " ".repeat(pad) + text;
 }
 
+export function widthWarning(width: number, minWidth: number): string | null {
+  if (width >= minWidth) return null;
+  return `  ${t.yellow}${t.bold}\u26A0 Terminal too narrow (need ${minWidth} cols)${t.reset}`;
+}
+
 export function formatBalance(balance: number): string {
   return `$${balance.toLocaleString()}`;
 }

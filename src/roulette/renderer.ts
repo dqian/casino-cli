@@ -1,7 +1,6 @@
 import type { AppState, BetType } from "../types";
 import * as t from "../theme";
-import { centerAnsi } from "../shared/render";
-import { renderHeader } from "../shared/render";
+import { centerAnsi, renderHeader, widthWarning } from "../shared/render";
 import {
   numberColor, numberAt, sameBetType, WHEEL_ORDER, betLabel,
   virtualToGridPos, gridPosToBet, payout,
@@ -125,6 +124,9 @@ export function renderRouletteScreen(state: AppState): string[] {
   const modeIcon = rs.wheelMode === "ball" ? "Ball" : "Arrow";
   const rightContent = `${t.gray}${modeIcon} | Chip: $${rs.betAmount}${t.reset}  `;
   lines.push(...renderHeader("ROULETTE", state.balance, width, rightContent));
+
+  const warn = widthWarning(width, 70);
+  if (warn) lines.push(warn);
 
   // Wheel / status area — pointer char depends on ball mode
   const useBall = rs.wheelMode === "ball";
