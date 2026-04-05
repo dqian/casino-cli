@@ -6,12 +6,13 @@ import { sliceAnsi } from "./shared/render";
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
   { name: "Blackjack", screen: "blackjack", label: "2-Deck, 3:2" },
+  { name: "Pai Gow Poker", screen: "paigow", label: "53-Card, House Way" },
   { name: "Baccarat", screen: null, label: "Coming Soon" },
   { name: "Craps", screen: null, label: "Coming Soon" },
 ];
 
 export function renderScreen(state: AppState): void {
-  if (state.screen === "roulette" || state.screen === "blackjack") {
+  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow") {
     renderGameScreen(state);
     return;
   }
