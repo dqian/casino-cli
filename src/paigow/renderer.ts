@@ -4,7 +4,7 @@ import type { AppState, PaiGowCard, Rank } from "../types";
 import * as t from "../theme";
 import { renderHeader, renderHotkeySplit, widthWarning } from "../shared/render";
 import type { HotkeyItem } from "../shared/render";
-import { evaluate5, evaluate2, isJoker } from "./cards";
+import { evaluate5, evaluate2, isJoker, rankValue } from "./cards";
 import { getArrangedHands } from "./game";
 
 const CARD_H = 9;
@@ -26,6 +26,24 @@ const PIP_LAYOUTS: Record<string, { c: number; r: number }[]> = {
   '9':  [{c:1,r:1}, {c:7,r:1}, {c:1,r:2}, {c:7,r:2}, {c:4,r:3}, {c:1,r:4}, {c:7,r:4}, {c:1,r:5}, {c:7,r:5}],
   '10': [{c:1,r:1}, {c:7,r:1}, {c:4,r:2}, {c:1,r:2}, {c:7,r:2}, {c:1,r:4}, {c:7,r:4}, {c:4,r:4}, {c:1,r:5}, {c:7,r:5}],
 };
+
+// 4-color suit mapping: ♠=white, ♥=red, ♦=blue, ♣=green
+function suitColor4(suit: string): string {
+  switch (suit) {
+    case '♠': return t.brightWhite;
+    case '♥': return t.brightRed;
+    case '♦': return t.fg256(75);   // blue
+    case '♣': return t.fg256(78);   // green
+    default:  return t.brightWhite;
+  }
+}
+
+function suitColor2(suit: string): string {
+  return (suit === '♥' || suit === '♦') ? t.brightRed : t.brightWhite;
+}
+
+// Set by renderPaiGowScreen before card rendering
+let getSuitColor: (suit: string) => string = suitColor4;
 
 // --- Card rendering ---
 
@@ -73,8 +91,7 @@ function renderCard(card: PaiGowCard): string[] {
     return renderJokerCard();
   }
 
-  const isRed = card.suit === '♥' || card.suit === '♦';
-  const clr = isRed ? t.brightRed : t.brightWhite;
+  const clr = getSuitColor(card.suit as string);
   const s = card.suit as string;
   const r = card.rank as Rank;
 
@@ -238,6 +255,9 @@ export function renderPaiGowScreen(state: AppState): string[] {
   const pg = state.paigow;
   const pad = "  ";
 
+  // Set suit color mode
+  getSuitColor = pg.coloredSuits ? suitColor4 : suitColor2;
+
   // Header
   lines.push(...renderHeader("PAI GOW POKER", state.balance, width));
 
@@ -314,11 +334,14 @@ function renderArrangingPhase(lines: string[], state: AppState, pad: string): vo
     const highEval = evaluate5(high);
     const lowEval = evaluate2(low);
 
-    const highCards = high.map(c => cardShortName(c)).join(" ");
-    const lowCards = low.map(c => cardShortName(c)).join(" ");
+    const highSorted = sortHandForDisplay(high);
+    const lowSorted = sortHandForDisplay(low);
+    const highCards = highSorted.map(c => cardShortFixed(c)).join("");
+    const lowCards = lowSorted.map(c => cardShortFixed(c)).join("");
+    const nameW = 20;
 
-    lines.push(`${pad}${t.cyan}High (5): ${t.reset}${t.brightWhite}${highEval.name}${t.reset}  ${t.gray}${highCards}${t.reset}`);
-    lines.push(`${pad}${t.cyan}Low  (2): ${t.reset}${t.brightWhite}${lowEval.name}${t.reset}  ${t.gray}${lowCards}${t.reset}`);
+    lines.push(`${pad}${t.cyan}High (5): ${t.reset}${t.brightWhite}${highEval.name.padEnd(nameW)}${t.reset}${highCards}`);
+    lines.push(`${pad}${t.cyan}Low  (2): ${t.reset}${t.brightWhite}${lowEval.name.padEnd(nameW)}${t.reset}${lowCards}`);
 
     if (pg.foulMessage) {
       lines.push(`${pad}${t.red}${t.bold}${pg.foulMessage}${t.reset}`);
@@ -345,15 +368,19 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   // Dealer's arranged hands
   lines.push(`${pad}${t.gray}DEALER${t.reset}`);
 
+  const nameW = 20;
+
   // Dealer high hand
   const dHighEval = evaluate5(pg.dealerHigh);
-  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${dHighEval.name}${t.reset}`);
+  const dHighSorted = sortHandForDisplay(pg.dealerHigh);
+  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${dHighEval.name.padEnd(nameW)}${t.reset}${dHighSorted.map(c => cardShortFixed(c)).join("")}`);
   const dealerHighCards = renderCompactCardRow(pg.dealerHigh);
   for (const line of dealerHighCards) lines.push(`${pad}${line}`);
 
   // Dealer low hand
   const dLowEval = evaluate2(pg.dealerLow);
-  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${dLowEval.name}${t.reset}`);
+  const dLowSorted = sortHandForDisplay(pg.dealerLow);
+  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${dLowEval.name.padEnd(nameW)}${t.reset}${dLowSorted.map(c => cardShortFixed(c)).join("")}`);
   const dealerLowCards = renderCompactCardRow(pg.dealerLow);
   for (const line of dealerLowCards) lines.push(`${pad}${line}`);
   lines.push("");
@@ -367,16 +394,18 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
 
   // Player high hand
+  const pHighSorted = sortHandForDisplay(pHigh);
   const highCmp = pHighEval.value - dHighEval.value;
   const highResult = highCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : highCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE (dealer)${t.reset}`;
-  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${pHighEval.name}${t.reset}  ${highResult}`);
+  lines.push(`${pad}${t.gray}High (5): ${t.reset}${t.brightWhite}${pHighEval.name.padEnd(nameW)}${t.reset}${pHighSorted.map(c => cardShortFixed(c)).join("")}  ${highResult}`);
   const playerHighCards = renderCompactCardRow(pHigh);
   for (const line of playerHighCards) lines.push(`${pad}${line}`);
 
   // Player low hand
+  const pLowSorted = sortHandForDisplay(pLow);
   const lowCmp = pLowEval.value - dLowEval.value;
   const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE (dealer)${t.reset}`;
-  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${pLowEval.name}${t.reset}  ${lowResult}`);
+  lines.push(`${pad}${t.gray}Low  (2): ${t.reset}${t.brightWhite}${pLowEval.name.padEnd(nameW)}${t.reset}${pLowSorted.map(c => cardShortFixed(c)).join("")}  ${lowResult}`);
   const playerLowCards = renderCompactCardRow(pLow);
   for (const line of playerLowCards) lines.push(`${pad}${line}`);
   lines.push("");
@@ -394,9 +423,38 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
 // Short name for a card (for text display)
 function cardShortName(card: PaiGowCard): string {
   if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr${t.reset}`;
-  const isRed = card.suit === '♥' || card.suit === '♦';
-  const clr = isRed ? t.brightRed : t.brightWhite;
+  const clr = getSuitColor(card.suit as string);
   return `${clr}${card.rank}${card.suit}${t.reset}`;
+}
+
+// Fixed-width short name (4 vis chars) for grid alignment
+function cardShortFixed(card: PaiGowCard): string {
+  if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr ${t.reset}`;
+  const clr = getSuitColor(card.suit as string);
+  const label = `${card.rank}${card.suit}`;
+  return `${clr}${label}${t.reset}${" ".repeat(Math.max(0, 4 - label.length))}`;
+}
+
+// Sort cards for display: pairs/groups first, then descending singles
+function sortHandForDisplay(cards: PaiGowCard[]): PaiGowCard[] {
+  const sorted = [...cards];
+  // Count ranks
+  const counts = new Map<number, number>();
+  for (const c of sorted) {
+    if (isJoker(c)) continue;
+    const v = rankValue(c.rank);
+    counts.set(v, (counts.get(v) ?? 0) + 1);
+  }
+  sorted.sort((a, b) => {
+    const va = isJoker(a) ? 14 : rankValue(a.rank);
+    const vb = isJoker(b) ? 14 : rankValue(b.rank);
+    const ca = isJoker(a) ? 0 : (counts.get(va) ?? 1);
+    const cb = isJoker(b) ? 0 : (counts.get(vb) ?? 1);
+    // Groups first (higher count), then by value descending
+    if (cb !== ca) return cb - ca;
+    return vb - va;
+  });
+  return sorted;
 }
 
 // --- Hotkey grid ---
@@ -413,6 +471,8 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
         { key: "Enter", label: "Deal" },
       ];
       right = [
+        { key: "s", label: `Sort: ${pg.sortMode}` },
+        { key: "k", label: pg.coloredSuits ? "4-color suits" : "2-color suits" },
         { key: "q", label: "Menu" },
       ];
       break;
@@ -425,6 +485,7 @@ export function renderPaiGowHotkeys(width: number, state: AppState): string[] {
       ];
       right = [
         { key: "c", label: "Clear selection" },
+        { key: "k", label: pg.coloredSuits ? "4-color suits" : "2-color suits" },
         { key: "q", label: "Menu" },
       ];
       break;

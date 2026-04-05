@@ -1,6 +1,7 @@
 // Pai Gow Poker — game logic: deal, arrange, house way, compare
 
 import type { AppState, PaiGowCard, PaiGowState } from "../types";
+import type { PaiGowSortMode } from "../types";
 import {
   createPaiGowDeck, drawCards, evaluate5, evaluate2,
   compareHands, isValidArrangement, isJoker, rankValue,
@@ -22,7 +23,19 @@ export function createPaiGowState(): PaiGowState {
     winAmount: 0,
     resultMessage: '',
     foulMessage: '',
+    sortMode: 'ascending',
+    coloredSuits: true,
   };
+}
+
+function sortCards(cards: PaiGowCard[], mode: PaiGowSortMode): void {
+  if (mode === 'unsorted') return;
+  const dir = mode === 'ascending' ? 1 : -1;
+  cards.sort((a, b) => {
+    const va = isJoker(a) ? (mode === 'ascending' ? 15 : 15) : rankValue(a.rank);
+    const vb = isJoker(b) ? (mode === 'ascending' ? 15 : 15) : rankValue(b.rank);
+    return (va - vb) * dir;
+  });
 }
 
 // --- Deal ---
@@ -37,6 +50,7 @@ export function deal(state: AppState): void {
   state.balance -= pg.betAmount;
   pg.deck = createPaiGowDeck();
   pg.playerCards = drawCards(pg.deck, 7);
+  sortCards(pg.playerCards, pg.sortMode);
   pg.dealerCards = drawCards(pg.deck, 7);
   pg.lowHand = [];
   pg.cursor = 0;

@@ -154,6 +154,8 @@ export interface PokerHandEval {
   name: string;         // display name, e.g. "Pair of Aces"
 }
 
+export type PaiGowSortMode = 'ascending' | 'descending' | 'unsorted';
+
 export interface PaiGowState {
   phase: PaiGowPhase;
   deck: PaiGowCard[];
@@ -167,6 +169,8 @@ export interface PaiGowState {
   winAmount: number;
   resultMessage: string;
   foulMessage: string;          // shown if arrangement is invalid
+  sortMode: PaiGowSortMode;
+  coloredSuits: boolean;
 }
 
 // Game module interface — each game implements this for TUI dispatch

@@ -52,6 +52,9 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, _render: () => v
         pg.lowHand = [];
         pg.foulMessage = '';
         break;
+      case 'k':
+        pg.coloredSuits = !pg.coloredSuits;
+        break;
       case 'q':
       case 'escape':
         state.screen = 'menu';
@@ -65,6 +68,16 @@ export function handlePaiGowKey(state: AppState, key: KeyEvent, _render: () => v
   switch (key.name) {
     case 'return':
       deal(state);
+      return;
+    case 's': {
+      const modes = ['ascending', 'descending', 'unsorted'] as const;
+      const idx = modes.indexOf(pg.sortMode);
+      pg.sortMode = modes[(idx + 1) % modes.length]!;
+      state.message = `Sort: ${pg.sortMode}`;
+      return;
+    }
+    case 'k':
+      pg.coloredSuits = !pg.coloredSuits;
       return;
     case 'up':
     case 'right':
