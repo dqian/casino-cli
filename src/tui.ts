@@ -144,7 +144,11 @@ export function startTui(): void {
     }
   }, 25);
 
-  process.stdout.on("resize", render);
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+  process.stdout.on("resize", () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(render, 50);
+  });
 
   const exit = () => {
     cleanup();
