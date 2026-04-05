@@ -38,6 +38,7 @@ function createDefaultOptions(): GameOptions {
   return {
     roulette: { defaultWheelMode: "ball", tableMax: null },
     blackjack: { numDecks: 2 },
+    paigow: { defaultSort: "descending", coloredSuits: true },
   };
 }
 
@@ -105,7 +106,7 @@ function createState(): AppState {
     messageTimeout: null,
     roulette: createRouletteState(options),
     blackjack: createBlackjackState(options),
-    paigow: createPaiGowState(),
+    paigow: createPaiGowState(options),
     options,
     optionsCursor: 0,
   };
@@ -214,6 +215,8 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           }
           newBjRound(state);
         } else if (item.screen === "paigow") {
+          state.paigow.sortMode = state.options.paigow.defaultSort;
+          state.paigow.coloredSuits = state.options.paigow.coloredSuits;
           newPaiGowRound(state);
         }
         state.message = "";
@@ -263,7 +266,7 @@ const DECK_OPTIONS = [1, 2, 4, 6, 8];
 
 function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): void {
   const opts = state.options;
-  const total = 3;
+  const total = 5;
 
   switch (key.name) {
     case "up":
@@ -292,6 +295,14 @@ function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): vo
           const idx = DECK_OPTIONS.indexOf(opts.blackjack.numDecks);
           const next = Math.max(0, Math.min(DECK_OPTIONS.length - 1, idx + dir));
           opts.blackjack.numDecks = DECK_OPTIONS[next]!;
+          break;
+        }
+        case 3: {
+          opts.paigow.defaultSort = opts.paigow.defaultSort === "ascending" ? "descending" : "ascending";
+          break;
+        }
+        case 4: {
+          opts.paigow.coloredSuits = !opts.paigow.coloredSuits;
           break;
         }
       }

@@ -9,7 +9,7 @@ import {
 
 // --- State factory ---
 
-export function createPaiGowState(): PaiGowState {
+export function createPaiGowState(options?: AppState["options"]): PaiGowState {
   return {
     phase: 'betting',
     deck: [],
@@ -23,8 +23,8 @@ export function createPaiGowState(): PaiGowState {
     winAmount: 0,
     resultMessage: '',
     foulMessage: '',
-    sortMode: 'descending',
-    coloredSuits: true,
+    sortMode: options?.paigow.defaultSort ?? 'descending',
+    coloredSuits: options?.paigow.coloredSuits ?? true,
     spreadFrame: 0,
   };
 }

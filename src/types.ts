@@ -16,6 +16,10 @@ export interface GameOptions {
   blackjack: {
     numDecks: number;
   };
+  paigow: {
+    defaultSort: PaiGowSortMode;
+    coloredSuits: boolean;
+  };
 }
 
 export interface AppState {

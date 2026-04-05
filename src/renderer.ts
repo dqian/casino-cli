@@ -207,6 +207,12 @@ function renderOptionsScreen(state: AppState): void {
   lines.push(optRow(2, "Number of Decks", `${opts.blackjack.numDecks}`));
   lines.push("");
 
+  // Pai Gow section
+  lines.push(`  ${t.cyan}${t.bold}PAI GOW POKER${t.reset}`);
+  lines.push(optRow(3, "Default Sort", opts.paigow.defaultSort === "ascending" ? "Asc" : "Desc"));
+  lines.push(optRow(4, "Colored Suits", opts.paigow.coloredSuits ? "On" : "Off"));
+  lines.push("");
+
   // Fill
   while (lines.length < height - 4) lines.push("");
 
