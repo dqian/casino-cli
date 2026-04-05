@@ -523,10 +523,17 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
   const lowResult = lowCmp > 0 ? `${t.green}${t.bold}WIN${t.reset}` : lowCmp < 0 ? `${t.red}LOSE${t.reset}` : `${t.yellow}TIE${t.reset}`;
 
   lines.push(`${pad}${t.brightWhite}${t.bold}YOUR HAND${t.reset}`);
-  lines.push(handInfoLine(pHighEval.name, pLowEval.name));
-  const playerRow = renderSplitHandRow(pHigh, pLow);
-  for (const line of playerRow) lines.push(`${pad}${line}`);
-  lines.push(resultLine(highResult, lowResult));
+  if (isAnimating) {
+    lines.push("");
+    const playerRow = renderSpreadingSplitHand(pHigh, pLow, progress);
+    for (const line of playerRow) lines.push(`${pad}${line}`);
+    lines.push("");
+  } else {
+    lines.push(handInfoLine(pHighEval.name, pLowEval.name));
+    const playerRow = renderSplitHandRow(pHigh, pLow);
+    for (const line of playerRow) lines.push(`${pad}${line}`);
+    lines.push(resultLine(highResult, lowResult));
+  }
   lines.push("");
 
   // Net result
