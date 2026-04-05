@@ -1,6 +1,6 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { placeBet, removeBet, clearBets, roll, newRound, BET_POSITIONS } from "./game";
+import { placeBet, placeOddsBet, removeBet, clearBets, roll, newRound, BET_POSITIONS } from "./game";
 
 const CHIP_SIZES = [1, 5, 10, 25, 50, 100, 500];
 
@@ -47,6 +47,9 @@ export function handleCrapsKey(state: AppState, key: KeyEvent, render: () => voi
     case " ":
       placeBet(state);
       break;
+    case "o":
+      placeOddsBet(state);
+      break;
     case "x":
       removeBet(state);
       break;
@@ -85,35 +88,39 @@ export function handleCrapsKey(state: AppState, key: KeyEvent, render: () => voi
   }
 }
 
-// Table layout for grid navigation:
-// Row 0: [0] Pass Line, [1] Don't Pass, [4] Field
-// Row 1: [2] Come, [3] Don't Come
-// Row 2: [5] Place 4, [6] Place 5, [7] Place 6
-// Row 3: [8] Place 8, [9] Place 9, [10] Place 10
+// Grid navigation layout matching the visual table:
+//
+// BET_POSITIONS indices:
+// 0-5:   Place 4, 5, 6, 8, 9, 10 (row 0)
+// 6:     Field (row 1, full width)
+// 7-8:   Don't Come, Come (row 2)
+// 9-13:  Don't Pass, Hard 4, 6, 8, 10 (row 3)
+// 14-19: Pass Line, Any 7, Any Craps, Yo, Horn, C&E (row 4)
+
+const GRID: number[][] = [
+  [0, 1, 2, 3, 4, 5],          // Place 4, 5, 6, 8, 9, 10
+  [6],                           // Field (full width)
+  [7, 8],                        // Don't Come, Come
+  [9, 10, 11, 12, 13],          // Don't Pass, Hard 4, 6, 8, 10
+  [14, 15, 16, 17, 18, 19],     // Pass Line, Any 7, Any Craps, Yo, Horn, C&E
+];
 
 interface GridPos { row: number; col: number }
 
-const GRID_LAYOUT: number[][] = [
-  [0, 1, 4],     // Pass, Don't Pass, Field
-  [2, 3],        // Come, Don't Come
-  [5, 6, 7],     // Place 4, 5, 6
-  [8, 9, 10],    // Place 8, 9, 10
-];
-
 function posToGrid(pos: number): GridPos {
-  for (let r = 0; r < GRID_LAYOUT.length; r++) {
-    const row = GRID_LAYOUT[r]!;
+  for (let r = 0; r < GRID.length; r++) {
+    const row = GRID[r]!;
     const c = row.indexOf(pos);
     if (c !== -1) return { row: r, col: c };
   }
-  return { row: 0, col: 0 };
+  return { row: 4, col: 0 }; // Default to Pass Line
 }
 
 function gridToPos(grid: GridPos): number {
-  const row = GRID_LAYOUT[grid.row];
-  if (!row) return 0;
+  const row = GRID[grid.row];
+  if (!row) return 14; // Pass Line
   const col = Math.min(grid.col, row.length - 1);
-  return row[col] ?? 0;
+  return row[col] ?? 14;
 }
 
 function navigateUp(cs: AppState["craps"]): void {
@@ -126,7 +133,7 @@ function navigateUp(cs: AppState["craps"]): void {
 
 function navigateDown(cs: AppState["craps"]): void {
   const grid = posToGrid(cs.cursorPos);
-  if (grid.row < GRID_LAYOUT.length - 1) {
+  if (grid.row < GRID.length - 1) {
     grid.row++;
     cs.cursorPos = gridToPos(grid);
   }
@@ -142,7 +149,7 @@ function navigateLeft(cs: AppState["craps"]): void {
 
 function navigateRight(cs: AppState["craps"]): void {
   const grid = posToGrid(cs.cursorPos);
-  const row = GRID_LAYOUT[grid.row];
+  const row = GRID[grid.row];
   if (row && grid.col < row.length - 1) {
     grid.col++;
     cs.cursorPos = gridToPos(grid);

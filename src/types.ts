@@ -194,12 +194,25 @@ export type CrapsBetKind =
   | "place6"
   | "place8"
   | "place9"
-  | "place10";
+  | "place10"
+  | "passOdds"
+  | "dontPassOdds"
+  | "comeOdds"
+  | "dontComeOdds"
+  | "hard4"
+  | "hard6"
+  | "hard8"
+  | "hard10"
+  | "any7"
+  | "anyCraps"
+  | "yo"
+  | "horn"
+  | "ce";
 
 export interface CrapsBet {
   kind: CrapsBetKind;
   amount: number;
-  point?: number; // for come/don't come bets that have established a point
+  point?: number; // for come/don't come bets and their odds that have established a point
 }
 
 export interface CrapsState {
