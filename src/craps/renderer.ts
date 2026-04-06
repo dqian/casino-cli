@@ -228,12 +228,28 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
   const isCur = (idx: number) => isBetting && cs.cursorPos === idx;
   const posIdx = (kind: CrapsBetKind): number => BET_POSITIONS.findIndex(bp => bp.kind === kind);
 
-  // ===== ROW 0: Place Numbers (6 across) =====
+  // ===== Header row above place numbers (segmented) =====
   {
     let border = pad + gjunc(TL);
     for (let i = 0; i < 6; i++) {
       border += hline(PLACE_W);
       border += gjunc(i < 5 ? TJ : TR);
+    }
+    lines.push(border);
+
+    let row = pad + gvl();
+    for (let i = 0; i < 6; i++) {
+      row += spc(PLACE_W) + gvl();
+    }
+    lines.push(row);
+  }
+
+  // ===== Place Numbers (6 across) =====
+  {
+    let border = pad + gjunc(LJ);
+    for (let i = 0; i < 6; i++) {
+      border += hline(PLACE_W);
+      border += gjunc(i < 5 ? XJ : RJ);
     }
     lines.push(border);
 
@@ -250,6 +266,13 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
       row += gvl();
     }
     lines.push(row);
+
+    // Extra height row
+    let emptyRow = pad + gvl();
+    for (let i = 0; i < 6; i++) {
+      emptyRow += spc(PLACE_W) + gvl();
+    }
+    lines.push(emptyRow);
 
     let payRow = pad + gvl();
     for (let i = 0; i < 6; i++) {
