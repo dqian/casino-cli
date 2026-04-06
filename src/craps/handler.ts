@@ -92,17 +92,27 @@ export function handleCrapsKey(state: AppState, key: KeyEvent, render: () => voi
 //
 // BET_POSITIONS indices:
 // 0-5:   Place 4, 5, 6, 8, 9, 10 (row 0)
-// 6:     Field (row 1, full width)
-// 7-8:   Don't Come, Come (row 2)
-// 9-13:  Don't Pass, Hard 4, 6, 8, 10 (row 3)
-// 14-19: Pass Line, Any 7, Any Craps, Yo, Horn, C&E (row 4)
+// 6-7:   Don't Come, Come (row 1)
+// 8:     Field (row 2, full width)
+// 9:     Don't Pass (row 3, full width)
+// 10:    Pass Line (row 4, full width)
+// 11:    Any 7 (row 5, full width)
+// 12-13: Hard 6, Hard 10 (row 6)
+// 14-15: Hard 8, Hard 4 (row 7)
+// 16-18: Yo, Horn, C&E (row 8)
+// 19:    Any Craps (row 9, full width)
 
 const GRID: number[][] = [
-  [0, 1, 2, 3, 4, 5],          // Place 4, 5, 6, 8, 9, 10
-  [6],                           // Field (full width)
-  [7, 8],                        // Don't Come, Come
-  [9, 10, 11, 12, 13],          // Don't Pass, Hard 4, 6, 8, 10
-  [14, 15, 16, 17, 18, 19],     // Pass Line, Any 7, Any Craps, Yo, Horn, C&E
+  [0, 1, 2, 3, 4, 5],            // Place 4, 5, 6, 8, 9, 10
+  [6, 7],                         // Don't Come, Come
+  [8],                            // Field
+  [9],                            // Don't Pass
+  [10],                           // Pass Line
+  [11],                           // Any 7
+  [12, 13],                       // Hard 6, Hard 10
+  [14, 15],                       // Hard 8, Hard 4
+  [16, 17, 18],                   // Yo, Horn, C&E
+  [19],                           // Any Craps
 ];
 
 interface GridPos { row: number; col: number }
@@ -113,14 +123,14 @@ function posToGrid(pos: number): GridPos {
     const c = row.indexOf(pos);
     if (c !== -1) return { row: r, col: c };
   }
-  return { row: 4, col: 0 }; // Default to Pass Line
+  return { row: 4, col: 0 }; // Default to Pass Line (index 10)
 }
 
 function gridToPos(grid: GridPos): number {
   const row = GRID[grid.row];
-  if (!row) return 14; // Pass Line
+  if (!row) return 10; // Pass Line
   const col = Math.min(grid.col, row.length - 1);
-  return row[col] ?? 14;
+  return row[col] ?? 10;
 }
 
 function navigateUp(cs: AppState["craps"]): void {

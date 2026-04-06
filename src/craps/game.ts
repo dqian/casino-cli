@@ -9,24 +9,28 @@ export const BET_POSITIONS: { kind: CrapsBetKind; label: string }[] = [
   { kind: "place8", label: "Place 8" },
   { kind: "place9", label: "Place 9" },
   { kind: "place10", label: "Place 10" },
-  // Row 1: Field
-  { kind: "field", label: "Field" },
-  // Row 2: Don't Come / Come
+  // Row 1: Don't Come + Come
   { kind: "dontCome", label: "Don't Come" },
   { kind: "come", label: "Come" },
-  // Row 3: Don't Pass / Hardways
+  // Row 2: Field
+  { kind: "field", label: "Field" },
+  // Row 3: Don't Pass
   { kind: "dontPass", label: "Don't Pass" },
-  { kind: "hard4", label: "Hard 4" },
-  { kind: "hard6", label: "Hard 6" },
-  { kind: "hard8", label: "Hard 8" },
-  { kind: "hard10", label: "Hard 10" },
-  // Row 4: Pass Line / Propositions
+  // Row 4: Pass Line
   { kind: "pass", label: "Pass Line" },
+  // Row 5: Any 7
   { kind: "any7", label: "Any 7" },
-  { kind: "anyCraps", label: "Any Craps" },
+  // Row 6-7: Hardways (9:1 left, 7:1 right)
+  { kind: "hard6", label: "Hard 6" },
+  { kind: "hard10", label: "Hard 10" },
+  { kind: "hard8", label: "Hard 8" },
+  { kind: "hard4", label: "Hard 4" },
+  // Row 8: Yo / Horn / C&E
   { kind: "yo", label: "Yo-11" },
   { kind: "horn", label: "Horn" },
   { kind: "ce", label: "C & E" },
+  // Row 9: Any Craps
+  { kind: "anyCraps", label: "Any Craps" },
 ];
 
 // Place bet payouts (to 1)
@@ -590,10 +594,15 @@ function finishRoll(state: AppState): void {
       } else if (sum === 7) {
         totalLoss += bet.amount;
         messages.push(`Come (${bet.point}) loses`);
-        // Come odds also lose
         const oddsIdx = cs.bets.findIndex(b => b.kind === "comeOdds" && b.point === bet.point);
         if (oddsIdx !== -1) {
-          totalLoss += cs.bets[oddsIdx]!.amount;
+          if (isComingOut) {
+            // Come odds are "off" during come-out — return to player
+            totalWin += cs.bets[oddsIdx]!.amount;
+            messages.push(`Come odds returned`);
+          } else {
+            totalLoss += cs.bets[oddsIdx]!.amount;
+          }
           cs.bets.splice(oddsIdx, 1);
           if (oddsIdx < i) i--;
         }
@@ -856,7 +865,7 @@ export function createCrapsState(): CrapsState {
     point: null,
     bets: [],
     betAmount: 10,
-    cursorPos: 14, // Start on Pass Line
+    cursorPos: 10, // Start on Pass Line
     dice: [1, 1],
     rollHistory: [],
     rollFrame: 0,
