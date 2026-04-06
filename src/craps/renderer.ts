@@ -201,19 +201,24 @@ function renderCell(
 }
 
 // --- Table layout ---
-// Place row:  6*PLACE_W + 5 = 77
-// DC+Come:    DC_W + 1 + COME_W = 77
-// Full rows:  INNER_W = 77
-// Center 2-col: HALF_W + 1 + HALF_W = 77
-// Center 3-col: THIRD_W + 1 + THIRD_W + 1 + THIRD_W = 77
+// Main board (left):
+//   Place row:  6*PLACE_W + 5 = 77
+//   DC+Come:    DC_W + 1 + COME_W = 77
+//   Full rows:  INNER_W = 77
+// Side panel (right):
+//   2-col: SIDE_HALF + 1 + SIDE_HALF = 29
+//   3-col: SIDE_THIRD + 1 + SIDE_THIRD + 1 + SIDE_THIRD = 29
 
 const PLACE_W = 12;
 const INNER_W = 6 * PLACE_W + 5;         // 77
-const CRAPS_MIN_WIDTH = INNER_W + 4;     // 81
 const DC_W = PLACE_W;                    // 12 (aligns with first place cell)
 const COME_W = INNER_W - DC_W - 1;       // 64
-const HALF_W = 38;                        // 38+1+38 = 77
-const THIRD_W = 25;                       // 25+1+25+1+25 = 77
+const SIDE_INNER = 29;                    // side panel inner width
+const SIDE_HALF = 14;                     // 14+1+14 = 29
+const SIDE_THIRD = 9;                     // 9+1+9+1+9 = 29
+const SIDE_GAP = 2;
+const MAIN_VIS_W = 2 + 1 + INNER_W + 1;  // 81 (pad + borders)
+const CRAPS_MIN_WIDTH = MAIN_VIS_W + SIDE_GAP + SIDE_INNER + 2; // 114
 
 function renderBetTable(cs: CrapsState, _width: number): string[] {
   const lines: string[] = [];
@@ -341,131 +346,145 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
   // Main table bottom border
   lines.push(pad + gjunc(BL) + hline(INNER_W) + gjunc(BR));
 
-  // Odds info line
+  // Odds info line (or empty padding)
   const oddsLabel = buildOddsLabel(cs);
-  if (oddsLabel) {
-    lines.push(pad + oddsLabel);
-  }
+  lines.push(oddsLabel ? pad + oddsLabel : "");
 
-  // ===== CENTER BETS =====
-  lines.push("");
+  // ===== SIDE PANEL (right side) =====
+  const mainLines = lines.splice(0); // move main board lines out
+  const sideLines: string[] = [];
 
-  // Row 5: Any 7 (full width)
+  // Any 7 (full width)
   {
-    lines.push(pad + gjunc(TL) + hline(INNER_W) + gjunc(TR));
+    sideLines.push(gjunc(TL) + hline(SIDE_INNER) + gjunc(TR));
     const a7Bet = findBet(cs.bets, "any7");
     const a7Idx = posIdx("any7");
-    let row = pad + gvl();
-    row += renderCell("4:1   SEVEN   4:1", a7Bet, isCur(a7Idx), true, INNER_W);
+    let row = gvl();
+    row += renderCell("4:1 SEVEN 4:1", a7Bet, isCur(a7Idx), true, SIDE_INNER);
     row += gvl();
-    lines.push(row);
+    sideLines.push(row);
   }
 
-  // Row 6: Hard 6 (9:1) | Hard 10 (7:1)
+  // Hard 6 | Hard 10 (2-col)
   {
-    lines.push(pad + gjunc(LJ) + hline(HALF_W) + gjunc(TJ) + hline(HALF_W) + gjunc(RJ));
-    const hardPairs: [CrapsBetKind, string, string][] = [
+    sideLines.push(gjunc(LJ) + hline(SIDE_HALF) + gjunc(TJ) + hline(SIDE_HALF) + gjunc(RJ));
+    const pairs: [CrapsBetKind, string, string][] = [
       ["hard6", "Hard 6", "9:1"],
       ["hard10", "Hard 10", "7:1"],
     ];
-    let row = pad + gvl();
-    for (const [kind, label] of hardPairs) {
-      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, HALF_W);
+    let row = gvl();
+    for (const [kind, label] of pairs) {
+      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, SIDE_HALF);
       row += gvl();
     }
-    lines.push(row);
-    let sub = pad + gvl();
-    for (const [, , pay] of hardPairs) {
-      const lp = Math.floor((HALF_W - pay.length) / 2);
-      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(HALF_W - pay.length - lp)}`;
+    sideLines.push(row);
+    let sub = gvl();
+    for (const [, , pay] of pairs) {
+      const lp = Math.floor((SIDE_HALF - pay.length) / 2);
+      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(SIDE_HALF - pay.length - lp)}`;
       sub += gvl();
     }
-    lines.push(sub);
+    sideLines.push(sub);
   }
 
-  // Row 7: Hard 8 (9:1) | Hard 4 (7:1)
+  // Hard 8 | Hard 4 (2-col)
   {
-    lines.push(pad + gjunc(LJ) + hline(HALF_W) + gjunc(XJ) + hline(HALF_W) + gjunc(RJ));
-    const hardPairs: [CrapsBetKind, string, string][] = [
+    sideLines.push(gjunc(LJ) + hline(SIDE_HALF) + gjunc(XJ) + hline(SIDE_HALF) + gjunc(RJ));
+    const pairs: [CrapsBetKind, string, string][] = [
       ["hard8", "Hard 8", "9:1"],
       ["hard4", "Hard 4", "7:1"],
     ];
-    let row = pad + gvl();
-    for (const [kind, label] of hardPairs) {
-      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, HALF_W);
+    let row = gvl();
+    for (const [kind, label] of pairs) {
+      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, SIDE_HALF);
       row += gvl();
     }
-    lines.push(row);
-    let sub = pad + gvl();
-    for (const [, , pay] of hardPairs) {
-      const lp = Math.floor((HALF_W - pay.length) / 2);
-      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(HALF_W - pay.length - lp)}`;
+    sideLines.push(row);
+    let sub = gvl();
+    for (const [, , pay] of pairs) {
+      const lp = Math.floor((SIDE_HALF - pay.length) / 2);
+      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(SIDE_HALF - pay.length - lp)}`;
       sub += gvl();
     }
-    lines.push(sub);
+    sideLines.push(sub);
   }
 
-  // Row 8: Ace-Deuce (15:1) | Aces (30:1) | Twelve (30:1)
+  // Ace-Deuce | Aces | Twelve (3-col, transition from 2-col)
   {
-    lines.push(pad + gjunc(LJ) +
-      hline(THIRD_W) + gjunc(TJ) +
-      hline(HALF_W - THIRD_W - 1) + gjunc(BJ) +
-      hline(HALF_W - THIRD_W - 1) + gjunc(TJ) +
-      hline(THIRD_W) + gjunc(RJ));
+    // 2-col divider at 14, 3-col dividers at 9 and 19
+    sideLines.push(gjunc(LJ) +
+      hline(SIDE_THIRD) + gjunc(TJ) +
+      hline(SIDE_HALF - SIDE_THIRD - 1) + gjunc(BJ) +
+      hline(SIDE_HALF - SIDE_THIRD - 1) + gjunc(TJ) +
+      hline(SIDE_THIRD) + gjunc(RJ));
 
-    const propKinds: CrapsBetKind[] = ["aceDeuce", "aces", "twelve"];
-    const propLabels = ["Ace-Deuce", "Aces", "Twelve"];
-    let row = pad + gvl();
-    for (let i = 0; i < 3; i++) {
-      const kind = propKinds[i]!;
-      row += renderCell(propLabels[i]!, findBet(cs.bets, kind), isCur(posIdx(kind)), true, THIRD_W);
+    const props: [CrapsBetKind, string][] = [
+      ["aceDeuce", "3"],
+      ["aces", "2"],
+      ["twelve", "12"],
+    ];
+    let row = gvl();
+    for (const [kind, label] of props) {
+      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, SIDE_THIRD);
       row += gvl();
     }
-    lines.push(row);
+    sideLines.push(row);
     const payouts = ["15:1", "30:1", "30:1"];
-    let sub = pad + gvl();
+    let sub = gvl();
     for (const pay of payouts) {
-      const lp = Math.floor((THIRD_W - pay.length) / 2);
-      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(THIRD_W - pay.length - lp)}`;
+      const lp = Math.floor((SIDE_THIRD - pay.length) / 2);
+      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(SIDE_THIRD - pay.length - lp)}`;
       sub += gvl();
     }
-    lines.push(sub);
+    sideLines.push(sub);
   }
 
-  // Row 9: Yo-11 | Horn | C & E (3 cells)
+  // Yo-11 | Horn | C & E (3-col)
   {
-    lines.push(pad + gjunc(LJ) +
-      hline(THIRD_W) + gjunc(XJ) +
-      hline(THIRD_W) + gjunc(XJ) +
-      hline(THIRD_W) + gjunc(RJ));
+    sideLines.push(gjunc(LJ) +
+      hline(SIDE_THIRD) + gjunc(XJ) +
+      hline(SIDE_THIRD) + gjunc(XJ) +
+      hline(SIDE_THIRD) + gjunc(RJ));
 
-    const propKinds: CrapsBetKind[] = ["yo", "horn", "ce"];
-    const propLabels = ["Yo-11", "Horn", "C & E"];
-    let row = pad + gvl();
-    for (let i = 0; i < 3; i++) {
-      const kind = propKinds[i]!;
-      row += renderCell(propLabels[i]!, findBet(cs.bets, kind), isCur(posIdx(kind)), true, THIRD_W);
+    const props: [CrapsBetKind, string][] = [
+      ["yo", "Yo-11"],
+      ["horn", "Horn"],
+      ["ce", "C & E"],
+    ];
+    let row = gvl();
+    for (const [kind, label] of props) {
+      row += renderCell(label, findBet(cs.bets, kind), isCur(posIdx(kind)), true, SIDE_THIRD);
       row += gvl();
     }
-    lines.push(row);
+    sideLines.push(row);
   }
 
-  // Row 10: Any Craps (full width)
+  // Any Craps (full width)
   {
-    lines.push(pad + gjunc(LJ) +
-      hline(THIRD_W) + gjunc(BJ) +
-      hline(THIRD_W) + gjunc(BJ) +
-      hline(THIRD_W) + gjunc(RJ));
+    sideLines.push(gjunc(LJ) +
+      hline(SIDE_THIRD) + gjunc(BJ) +
+      hline(SIDE_THIRD) + gjunc(BJ) +
+      hline(SIDE_THIRD) + gjunc(RJ));
     const acBet = findBet(cs.bets, "anyCraps");
     const acIdx = posIdx("anyCraps");
-    let row = pad + gvl();
-    row += renderCell("7:1   ANY CRAPS   7:1", acBet, isCur(acIdx), true, INNER_W);
+    let row = gvl();
+    row += renderCell("ANY CRAPS 7:1", acBet, isCur(acIdx), true, SIDE_INNER);
     row += gvl();
-    lines.push(row);
+    sideLines.push(row);
   }
 
-  // Center bets bottom border
-  lines.push(pad + gjunc(BL) + hline(INNER_W) + gjunc(BR));
+  // Side panel bottom border
+  sideLines.push(gjunc(BL) + hline(SIDE_INNER) + gjunc(BR));
+
+  // ===== COMBINE HORIZONTALLY =====
+  const maxRows = Math.max(mainLines.length, sideLines.length);
+  for (let i = 0; i < maxRows; i++) {
+    const mLine = mainLines[i] ?? "";
+    const sLine = sideLines[i] ?? "";
+    const mVis = t.stripAnsi(mLine).length;
+    const padNeeded = Math.max(0, MAIN_VIS_W - mVis);
+    lines.push(mLine + spc(padNeeded + SIDE_GAP) + sLine);
+  }
 
   // ===== Info line =====
   const curPos = BET_POSITIONS[cs.cursorPos];
