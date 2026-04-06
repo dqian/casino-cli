@@ -207,7 +207,10 @@ export type CrapsBetKind =
   | "anyCraps"
   | "yo"
   | "horn"
-  | "ce";
+  | "ce"
+  | "aces"
+  | "aceDeuce"
+  | "twelve";
 
 export interface CrapsBet {
   kind: CrapsBetKind;

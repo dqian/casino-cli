@@ -405,14 +405,38 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
     lines.push(sub);
   }
 
-  // Row 8: Yo-11 | Horn | C & E (3 cells)
-  // Border: merge 2 half-cells into 3 third-cells
-  // Half divider at 38, third dividers at 25 and 51
+  // Row 8: Ace-Deuce (15:1) | Aces (30:1) | Twelve (30:1)
   {
     lines.push(pad + gjunc(LJ) +
       hline(THIRD_W) + gjunc(TJ) +
       hline(HALF_W - THIRD_W - 1) + gjunc(BJ) +
       hline(HALF_W - THIRD_W - 1) + gjunc(TJ) +
+      hline(THIRD_W) + gjunc(RJ));
+
+    const propKinds: CrapsBetKind[] = ["aceDeuce", "aces", "twelve"];
+    const propLabels = ["Ace-Deuce", "Aces", "Twelve"];
+    let row = pad + gvl();
+    for (let i = 0; i < 3; i++) {
+      const kind = propKinds[i]!;
+      row += renderCell(propLabels[i]!, findBet(cs.bets, kind), isCur(posIdx(kind)), true, THIRD_W);
+      row += gvl();
+    }
+    lines.push(row);
+    const payouts = ["15:1", "30:1", "30:1"];
+    let sub = pad + gvl();
+    for (const pay of payouts) {
+      const lp = Math.floor((THIRD_W - pay.length) / 2);
+      sub += `${spc(lp)}${t.gray}${t.dim}${pay}${t.reset}${spc(THIRD_W - pay.length - lp)}`;
+      sub += gvl();
+    }
+    lines.push(sub);
+  }
+
+  // Row 9: Yo-11 | Horn | C & E (3 cells)
+  {
+    lines.push(pad + gjunc(LJ) +
+      hline(THIRD_W) + gjunc(XJ) +
+      hline(THIRD_W) + gjunc(XJ) +
       hline(THIRD_W) + gjunc(RJ));
 
     const propKinds: CrapsBetKind[] = ["yo", "horn", "ce"];
@@ -426,7 +450,7 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
     lines.push(row);
   }
 
-  // Row 9: Any Craps (full width)
+  // Row 10: Any Craps (full width)
   {
     lines.push(pad + gjunc(LJ) +
       hline(THIRD_W) + gjunc(BJ) +

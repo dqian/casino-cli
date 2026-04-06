@@ -99,8 +99,9 @@ export function handleCrapsKey(state: AppState, key: KeyEvent, render: () => voi
 // 11:    Any 7 (row 5, full width)
 // 12-13: Hard 6, Hard 10 (row 6)
 // 14-15: Hard 8, Hard 4 (row 7)
-// 16-18: Yo, Horn, C&E (row 8)
-// 19:    Any Craps (row 9, full width)
+// 16-18: Ace-Deuce, Aces, Twelve (row 8)
+// 19-21: Yo, Horn, C&E (row 9)
+// 22:    Any Craps (row 10, full width)
 
 const GRID: number[][] = [
   [0, 1, 2, 3, 4, 5],            // Place 4, 5, 6, 8, 9, 10
@@ -111,8 +112,9 @@ const GRID: number[][] = [
   [11],                           // Any 7
   [12, 13],                       // Hard 6, Hard 10
   [14, 15],                       // Hard 8, Hard 4
-  [16, 17, 18],                   // Yo, Horn, C&E
-  [19],                           // Any Craps
+  [16, 17, 18],                   // Ace-Deuce, Aces, Twelve
+  [19, 20, 21],                   // Yo, Horn, C&E
+  [22],                           // Any Craps
 ];
 
 interface GridPos { row: number; col: number }

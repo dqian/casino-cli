@@ -25,11 +25,15 @@ export const BET_POSITIONS: { kind: CrapsBetKind; label: string }[] = [
   { kind: "hard10", label: "Hard 10" },
   { kind: "hard8", label: "Hard 8" },
   { kind: "hard4", label: "Hard 4" },
-  // Row 8: Yo / Horn / C&E
+  // Row 8: Ace-Deuce / Aces / Twelve
+  { kind: "aceDeuce", label: "Ace-Deuce (3)" },
+  { kind: "aces", label: "Aces (2)" },
+  { kind: "twelve", label: "Twelve (12)" },
+  // Row 9: Yo / Horn / C&E
   { kind: "yo", label: "Yo-11" },
   { kind: "horn", label: "Horn" },
   { kind: "ce", label: "C & E" },
-  // Row 9: Any Craps
+  // Row 10: Any Craps
   { kind: "anyCraps", label: "Any Craps" },
 ];
 
@@ -153,7 +157,8 @@ export function placeBet(state: AppState): void {
   }
   // Single-roll propositions
   else if (pos.kind === "any7" || pos.kind === "anyCraps" || pos.kind === "yo" ||
-           pos.kind === "horn" || pos.kind === "ce") {
+           pos.kind === "horn" || pos.kind === "ce" ||
+           pos.kind === "aces" || pos.kind === "aceDeuce" || pos.kind === "twelve") {
     const existing = cs.bets.find(b => b.kind === pos.kind);
     if (existing) {
       existing.amount += amount;
@@ -517,6 +522,54 @@ function finishRoll(state: AppState): void {
       } else {
         totalLoss += bet.amount;
         messages.push("C&E loses");
+      }
+      cs.bets.splice(i, 1);
+    }
+  }
+
+  // --- Aces (2 pays 30:1) ---
+  for (let i = cs.bets.length - 1; i >= 0; i--) {
+    const bet = cs.bets[i]!;
+    if (bet.kind === "aces") {
+      if (sum === 2) {
+        const win = bet.amount * 30;
+        totalWin += win + bet.amount;
+        messages.push(`Aces wins $${win}`);
+      } else {
+        totalLoss += bet.amount;
+        messages.push("Aces loses");
+      }
+      cs.bets.splice(i, 1);
+    }
+  }
+
+  // --- Ace-Deuce (3 pays 15:1) ---
+  for (let i = cs.bets.length - 1; i >= 0; i--) {
+    const bet = cs.bets[i]!;
+    if (bet.kind === "aceDeuce") {
+      if (sum === 3) {
+        const win = bet.amount * 15;
+        totalWin += win + bet.amount;
+        messages.push(`Ace-Deuce wins $${win}`);
+      } else {
+        totalLoss += bet.amount;
+        messages.push("Ace-Deuce loses");
+      }
+      cs.bets.splice(i, 1);
+    }
+  }
+
+  // --- Twelve (12 pays 30:1) ---
+  for (let i = cs.bets.length - 1; i >= 0; i--) {
+    const bet = cs.bets[i]!;
+    if (bet.kind === "twelve") {
+      if (sum === 12) {
+        const win = bet.amount * 30;
+        totalWin += win + bet.amount;
+        messages.push(`Twelve wins $${win}`);
+      } else {
+        totalLoss += bet.amount;
+        messages.push("Twelve loses");
       }
       cs.bets.splice(i, 1);
     }
@@ -920,6 +973,12 @@ export function getBetPayoutInfo(kind: CrapsBetKind): string {
       return "2/12 pay 30:1, 3/11 pay 15:1";
     case "ce":
       return "Craps 3:1, Eleven 7:1";
+    case "aces":
+      return "Pays 30:1 (snake eyes)";
+    case "aceDeuce":
+      return "Pays 15:1 (1-2)";
+    case "twelve":
+      return "Pays 30:1 (boxcars)";
   }
   return "";
 }
