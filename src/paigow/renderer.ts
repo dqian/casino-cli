@@ -36,12 +36,19 @@ const LABEL_W = 10; // "High (5): " or "Low  (2): "
 
 function renderJokerCard(): string[] {
   const clr = t.fg256(213); // magenta/pink
-  const topLabel = `J★`;
+  const topLabel = `Jkr`;
   const topLine = `${clr}${t.bold}${topLabel}${t.reset}${" ".repeat(INNER_W - topLabel.length)}`;
-  const botLabel = `★J`;
+  const botLabel = `Jkr`;
   const botLine = `${" ".repeat(INNER_W - botLabel.length)}${clr}${t.bold}${botLabel}${t.reset}`;
 
-  const bodyRows = renderFaceBody(clr, '★', 'J');
+  // Custom body: "Jkr" is 3 cols so it fills the 3-col space between │ and │ exactly
+  const bodyRows = [
+    `  ${clr}╭───╮${t.reset}  `,
+    `  ${clr}│${t.reset} ${clr}${t.bold}★${t.reset} ${clr}│${t.reset}  `,
+    `  ${clr}│${t.reset}${clr}${t.bold}Jkr${t.reset}${clr}│${t.reset}  `,
+    `  ${clr}│${t.reset} ${clr}${t.bold}★${t.reset} ${clr}│${t.reset}  `,
+    `  ${clr}╰───╯${t.reset}  `,
+  ];
 
   const lines: string[] = [];
   lines.push(`${t.gray}┌${"─".repeat(INNER_W)}┐${t.reset}`);
@@ -611,14 +618,14 @@ function renderResultPhase(lines: string[], state: AppState, pad: string, _width
 
 // Short name for a card (for text display)
 function cardShortName(card: PaiGowCard): string {
-  if (isJoker(card)) return `${t.fg256(213)}${t.bold}J★${t.reset}`;
+  if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr${t.reset}`;
   const clr = getSuitColor(card.suit as string);
   return `${clr}${card.rank}${card.suit}${t.reset}`;
 }
 
 // Fixed-width short name (4 vis chars) for grid alignment
 function cardShortFixed(card: PaiGowCard): string {
-  if (isJoker(card)) return `${t.fg256(213)}${t.bold}J★${t.reset}  `;
+  if (isJoker(card)) return `${t.fg256(213)}${t.bold}Jkr${t.reset} `;
   const clr = getSuitColor(card.suit as string);
   const label = `${card.rank}${card.suit}`;
   return `${clr}${label}${t.reset}${" ".repeat(Math.max(0, 4 - label.length))}`;
