@@ -274,15 +274,6 @@ function renderBetTable(cs: CrapsState, _width: number): string[] {
     }
     lines.push(emptyRow);
 
-    let payRow = pad + gvl();
-    for (let i = 0; i < 6; i++) {
-      const ps = placePayoutStr(placeNums[i]!);
-      const lp = Math.floor((PLACE_W - ps.length) / 2);
-      const rp = PLACE_W - ps.length - lp;
-      payRow += `${spc(lp)}${t.gray}${t.dim}${ps}${t.reset}${spc(rp)}`;
-      payRow += gvl();
-    }
-    lines.push(payRow);
   }
 
   // ===== ROW 1: Don't Come (left) | Come (right), 2 lines tall =====
