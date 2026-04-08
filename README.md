@@ -37,8 +37,61 @@ bun i
 Run:
 
 ```sh
-bun run src/index.ts
+bun run start
 ```
+
+## Running with Environments
+
+The TUI connects to a backend server for user accounts and balance persistence. Use environment-specific scripts to point at the right server:
+
+```sh
+bun run dev    # hits localhost:3000 (local server)
+bun run prod   # hits production Railway server
+bun run start  # no env file, defaults to localhost:3000
+```
+
+Environment files:
+- `.env.local` — local development (`CASINO_API_URL=http://localhost:3000`)
+- `.env.production` — production (`CASINO_API_URL=https://casino-server-production.up.railway.app`)
+
+Update `.env.production` with your actual Railway domain once deployed.
+
+## Local Development (Full Stack)
+
+To run the TUI with auth locally, you need the [casino-server](https://github.com/dqian/casino-server) running. See that repo's README for server setup.
+
+**1. Start Postgres** (one-time, requires Docker)
+
+```sh
+docker run -d --name casino-pg -e POSTGRES_PASSWORD=dev -p 5432:5432 postgres:16
+```
+
+**2. Start the server**
+
+```sh
+cd casino-server
+cp .env.example .env   # works as-is, no API keys needed for dev
+bun run dev             # starts on localhost:3000 with auto-reload
+```
+
+**3. Start the TUI**
+
+```sh
+cd casino-cli
+bun run dev             # connects to localhost:3000
+```
+
+In dev mode, OTP codes print to the server's console output instead of being emailed — just read the code from the server terminal and type it into the TUI.
+
+## User Accounts
+
+Press `l` from the main menu to sign in with email. Signing in saves your play money balance across sessions and devices.
+
+- Enter your email to receive a 6-digit login code
+- In dev mode, the code prints to the server console instead of being emailed
+- Balance syncs automatically when you exit a game or quit
+- Balance resets are throttled to once per 24 hours for signed-in users
+- Session is stored at `~/.casino-cli/auth.json`
 
 ## Alias
 
