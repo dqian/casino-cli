@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 
 export interface AuthData {
   token: string;
@@ -13,7 +13,7 @@ const AUTH_FILE = join(AUTH_DIR, "auth.json");
 
 export function loadAuth(): AuthData | null {
   try {
-    const raw = require("fs").readFileSync(AUTH_FILE, "utf-8");
+    const raw = readFileSync(AUTH_FILE, "utf-8");
     const data = JSON.parse(raw);
     if (data.token && data.email && data.userId) return data as AuthData;
     return null;
@@ -24,11 +24,11 @@ export function loadAuth(): AuthData | null {
 
 export function saveAuth(data: AuthData): void {
   mkdirSync(AUTH_DIR, { recursive: true });
-  require("fs").writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2));
+  writeFileSync(AUTH_FILE, JSON.stringify(data, null, 2), { mode: 0o600 });
 }
 
 export function clearAuth(): void {
   try {
-    require("fs").unlinkSync(AUTH_FILE);
+    unlinkSync(AUTH_FILE);
   } catch {}
 }

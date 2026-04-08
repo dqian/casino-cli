@@ -15,7 +15,7 @@ import { handleCrapsKey } from "./craps/handler";
 import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
 import { createCrapsState } from "./craps/game";
 import { handleLoginKey, verifySession, syncBalanceToServer, serverResetBalance } from "./auth/handler";
-import { loadAuth } from "./auth/store";
+import { loadAuth, clearAuth } from "./auth/store";
 
 // --- Game registry ---
 
@@ -281,8 +281,6 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
     }
     case "s":
       if (state.auth.loggedIn) {
-        // Log out
-        const { clearAuth } = require("./auth/store");
         clearAuth();
         state.auth.loggedIn = false;
         state.auth.email = "";

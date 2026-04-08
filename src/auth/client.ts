@@ -40,6 +40,13 @@ async function post(path: string, body: object, token?: string): Promise<any> {
     body: JSON.stringify(body),
   });
 
+  if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
+    return res.json();
+  }
+  if (!res.ok) {
+    return { error: `Server error (${res.status})` };
+  }
+
   return res.json();
 }
 
@@ -47,6 +54,13 @@ async function get(path: string, token: string): Promise<any> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Authorization": `Bearer ${token}` },
   });
+
+  if (!res.ok && res.headers.get("content-type")?.includes("application/json")) {
+    return res.json();
+  }
+  if (!res.ok) {
+    return { error: `Server error (${res.status})` };
+  }
 
   return res.json();
 }

@@ -1,7 +1,9 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { sendCode, verifyCode, getMe, resetBalance as apiResetBalance } from "./client";
+import { sendCode, verifyCode, getMe, syncBalance, resetBalance as apiResetBalance } from "./client";
 import { saveAuth, clearAuth } from "./store";
+
+const MAX_EMAIL_LENGTH = 254;
 
 export function handleLoginKey(state: AppState, key: KeyEvent, render: () => void): void {
   const auth = state.auth;
@@ -36,7 +38,7 @@ function handleEmailInput(state: AppState, key: KeyEvent, render: () => void): v
     auth.error = "";
     render();
 
-    sendCode(auth.emailInput).then((res) => {
+    sendCode(auth.emailInput.trim()).then((res) => {
       if (res.error) {
         auth.phase = "error";
         auth.error = res.error;
@@ -58,8 +60,8 @@ function handleEmailInput(state: AppState, key: KeyEvent, render: () => void): v
     return;
   }
 
-  // Accept printable characters for email
-  if (key.raw.length === 1 && !key.ctrl && key.raw.charCodeAt(0) >= 32) {
+  // Accept printable characters for email, cap at RFC 5321 max
+  if (key.raw.length === 1 && !key.ctrl && key.raw.charCodeAt(0) >= 33 && auth.emailInput.length < MAX_EMAIL_LENGTH) {
     auth.emailInput += key.raw;
   }
 }
@@ -84,11 +86,9 @@ function handleCodeInput(state: AppState, key: KeyEvent, render: () => void): vo
     auth.codeInput += key.raw;
   }
 
-  // Auto-submit or Enter
-  if (auth.codeInput.length === 6 || (key.name === "return" && auth.codeInput.length === 6)) {
-    if (auth.codeInput.length === 6) {
-      submitCode(state, render);
-    }
+  // Auto-submit on 6th digit
+  if (auth.codeInput.length === 6) {
+    submitCode(state, render);
   }
 }
 
@@ -98,7 +98,7 @@ function submitCode(state: AppState, render: () => void): void {
   auth.error = "";
   render();
 
-  verifyCode(auth.emailInput, auth.codeInput).then((res) => {
+  verifyCode(auth.emailInput.trim(), auth.codeInput).then((res) => {
     if (res.error) {
       auth.phase = "code-input";
       auth.codeInput = "";
@@ -160,8 +160,6 @@ export async function verifySession(state: AppState): Promise<boolean> {
 /** Sync balance to server (fire-and-forget). */
 export function syncBalanceToServer(state: AppState): void {
   if (!state.auth.loggedIn || !state.auth.token) return;
-
-  const { syncBalance } = require("./client");
   syncBalance(state.auth.token, Math.round(state.balance * 100)).catch(() => {});
 }
 
