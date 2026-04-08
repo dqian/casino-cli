@@ -279,7 +279,7 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     }
-    case "l":
+    case "s":
       if (state.auth.loggedIn) {
         // Log out
         const { clearAuth } = require("./auth/store");

@@ -141,7 +141,7 @@ function renderMenuScreen(state: AppState): void {
   const menuKeys: { key: string; label: string }[] = [
     { key: "↑↓", label: "Select" },
     { key: "Enter", label: "Play" },
-    { key: "l", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
+    { key: "s", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
     { key: "o", label: "Options" },
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"
