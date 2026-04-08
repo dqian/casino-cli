@@ -2,6 +2,7 @@ import type { AppState, MenuItem, GameModule } from "./types";
 import * as t from "./theme";
 import { GAMES } from "./tui";
 import { sliceAnsi } from "./shared/render";
+import { renderLoginScreen } from "./auth/renderer";
 
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
@@ -18,6 +19,12 @@ export function renderScreen(state: AppState): void {
   }
   if (state.screen === "options") {
     renderOptionsScreen(state);
+    return;
+  }
+  if (state.screen === "login") {
+    const { rows: height } = process.stdout;
+    const lines = renderLoginScreen(state);
+    writeLines(lines, height);
     return;
   }
   renderMenuScreen(state);
@@ -76,6 +83,14 @@ function renderMenuScreen(state: AppState): void {
   }
   lines.push("");
 
+  // Auth status
+  if (state.auth.loggedIn) {
+    lines.push(centerAnsiText(`${t.green}${t.bold}●${t.reset} ${t.gray}Signed in as ${t.white}${state.auth.email}${t.reset}`, width));
+  } else {
+    lines.push(centerAnsiText(`${t.gray}${t.dim}Sign in to save progress${t.reset}`, width));
+  }
+  lines.push("");
+
   // Mode indicator + Balance
   const modeLabel = state.moneyMode === "play"
     ? `${t.cyan}${t.bold}PLAY MONEY${t.reset}`
@@ -126,6 +141,7 @@ function renderMenuScreen(state: AppState): void {
   const menuKeys: { key: string; label: string }[] = [
     { key: "↑↓", label: "Select" },
     { key: "Enter", label: "Play" },
+    { key: "l", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
     { key: "o", label: "Options" },
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"

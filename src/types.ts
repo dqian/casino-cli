@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options" | "login";
 
 export type MenuItem = {
   name: string;
@@ -22,6 +22,19 @@ export interface GameOptions {
   };
 }
 
+export type LoginPhase = "email-input" | "sending" | "code-input" | "verifying" | "error";
+
+export interface AuthState {
+  loggedIn: boolean;
+  email: string;
+  token: string;
+  userId: number;
+  phase: LoginPhase;
+  emailInput: string;
+  codeInput: string;
+  error: string;
+}
+
 export interface AppState {
   screen: Screen;
   balance: number;
@@ -36,6 +49,7 @@ export interface AppState {
   craps: CrapsState;
   options: GameOptions;
   optionsCursor: number;
+  auth: AuthState;
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result";

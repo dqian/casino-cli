@@ -1,4 +1,4 @@
-import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, GameOptions, GameModule } from "./types";
+import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, GameOptions, GameModule, AuthState } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
@@ -14,6 +14,8 @@ import { createPaiGowState, newRound as newPaiGowRound } from "./paigow/game";
 import { handleCrapsKey } from "./craps/handler";
 import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
 import { createCrapsState } from "./craps/game";
+import { handleLoginKey, verifySession, syncBalanceToServer, serverResetBalance } from "./auth/handler";
+import { loadAuth } from "./auth/store";
 
 // --- Game registry ---
 
@@ -102,6 +104,32 @@ function createBlackjackState(options: GameOptions): BlackjackState {
   };
 }
 
+function createAuthState(): AuthState {
+  const saved = loadAuth();
+  if (saved) {
+    return {
+      loggedIn: true,
+      email: saved.email,
+      token: saved.token,
+      userId: saved.userId,
+      phase: "email-input",
+      emailInput: "",
+      codeInput: "",
+      error: "",
+    };
+  }
+  return {
+    loggedIn: false,
+    email: "",
+    token: "",
+    userId: 0,
+    phase: "email-input",
+    emailInput: "",
+    codeInput: "",
+    error: "",
+  };
+}
+
 function createState(): AppState {
   const options = createDefaultOptions();
   return {
@@ -118,6 +146,7 @@ function createState(): AppState {
     craps: createCrapsState(),
     options,
     optionsCursor: 0,
+    auth: createAuthState(),
   };
 }
 
@@ -145,6 +174,11 @@ export function startTui(): void {
 
   const render = () => renderScreen(state);
   render();
+
+  // If we have a saved session, verify it in the background
+  if (state.auth.loggedIn) {
+    verifySession(state).then(() => render());
+  }
 
   // Animate menu (shimmer + cursor)
   let lastRenderedFrame = -1;
@@ -182,14 +216,23 @@ export function startTui(): void {
       return;
     }
 
+    const prevScreen = state.screen;
+
     // Game dispatch via registry
     const game = GAMES[state.screen];
     if (game) {
       game.handleKey(state, key, render);
     } else if (state.screen === "menu") {
-      handleMenuKey(state, key, exit);
+      handleMenuKey(state, key, exit, render);
     } else if (state.screen === "options") {
       handleOptionsKey(state, key);
+    } else if (state.screen === "login") {
+      handleLoginKey(state, key, render);
+    }
+
+    // Sync balance when returning to menu from a game
+    if (state.screen === "menu" && prevScreen !== "menu" && prevScreen !== "options" && prevScreen !== "login") {
+      syncBalanceToServer(state);
     }
 
     render();
@@ -198,7 +241,7 @@ export function startTui(): void {
 
 // --- Menu ---
 
-function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: () => void): void {
+function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: () => void, render: () => void): void {
   switch (key.name) {
     case "up":
       state.menuCursor = Math.max(0, state.menuCursor - 1);
@@ -236,6 +279,26 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     }
+    case "l":
+      if (state.auth.loggedIn) {
+        // Log out
+        const { clearAuth } = require("./auth/store");
+        clearAuth();
+        state.auth.loggedIn = false;
+        state.auth.email = "";
+        state.auth.token = "";
+        state.auth.userId = 0;
+        state.balance = 1000;
+        state.message = "Logged out";
+      } else {
+        state.screen = "login";
+        state.auth.phase = "email-input";
+        state.auth.emailInput = "";
+        state.auth.codeInput = "";
+        state.auth.error = "";
+        state.message = "";
+      }
+      break;
     case "o":
       state.screen = "options";
       state.optionsCursor = 0;
@@ -254,8 +317,12 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "r":
       if (state.moneyMode === "play") {
-        state.balance = 1000;
-        state.message = "Balance reset to $1,000";
+        if (state.auth.loggedIn) {
+          serverResetBalance(state, render);
+        } else {
+          state.balance = 1000;
+          state.message = "Balance reset to $1,000";
+        }
       }
       break;
     case "d":
@@ -264,6 +331,7 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     case "q":
+      syncBalanceToServer(state);
       exit();
       break;
   }
