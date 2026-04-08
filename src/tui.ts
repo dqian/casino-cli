@@ -216,7 +216,7 @@ export function startTui(): void {
       return;
     }
 
-    const prevScreen = state.screen;
+    const prevBalance = state.balance;
 
     // Game dispatch via registry
     const game = GAMES[state.screen];
@@ -230,8 +230,8 @@ export function startTui(): void {
       handleLoginKey(state, key, render);
     }
 
-    // Sync balance when returning to menu from a game
-    if (state.screen === "menu" && prevScreen !== "menu" && prevScreen !== "options" && prevScreen !== "login") {
+    // Sync balance to server whenever it changes
+    if (state.balance !== prevBalance) {
       syncBalanceToServer(state);
     }
 
