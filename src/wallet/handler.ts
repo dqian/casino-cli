@@ -265,6 +265,8 @@ function handleWithdrawCode(state: AppState, key: KeyEvent, render: () => void):
 /** Full wallet load — address, balance, and recent deposits. Starts auto-refresh. */
 export function loadWallet(state: AppState, render: () => void): void {
   state.wallet.depositPhase = "loading";
+  state.wallet.depositsLoaded = false;
+  state.wallet.deposits = [];
   render();
 
   // Start 10s polling
@@ -298,8 +300,12 @@ export function loadWallet(state: AppState, render: () => void): void {
         amount: t.amount,
         tx_hash: t.tx_hash,
       }));
+      state.wallet.depositsLoaded = true;
       render();
-    }).catch(() => {});
+    }).catch(() => {
+      state.wallet.depositsLoaded = true;
+      render();
+    });
   }).catch(() => {
     state.wallet.depositPhase = "error";
     state.wallet.error = "Could not reach server";
@@ -317,13 +323,14 @@ function refreshBalance(state: AppState, render: () => void): void {
     render();
   }).catch(() => {});
 
-  // Also refresh deposits
+  // Also refresh deposits (silently — don't flip the loaded flag on refresh)
   getWalletDeposits(state.auth.token).then((res) => {
     state.wallet.deposits = (res.transfers || []).map((t) => ({
       from: t.from,
       amount: t.amount,
       tx_hash: t.tx_hash,
     }));
+    state.wallet.depositsLoaded = true;
     render();
   }).catch(() => {});
 }

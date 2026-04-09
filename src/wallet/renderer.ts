@@ -60,9 +60,12 @@ export function renderDepositScreen(state: AppState): string[] {
     lines.push("");
 
     // Recent deposits
-    if (w.deposits.length > 0) {
-      lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
-      lines.push(center(`${t.white}${t.bold}Recent deposits${t.reset}`, width));
+    lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
+    lines.push(center(`${t.white}${t.bold}Recent deposits${t.reset}`, width));
+    if (!w.depositsLoaded) {
+      lines.push("");
+      lines.push(center(`${t.cyan}Loading recent deposits...${t.reset}`, width));
+    } else if (w.deposits.length > 0) {
       lines.push(center(`${t.gray}${t.dim}Press 1-5 to view tx on basescan${t.reset}`, width));
       lines.push("");
 
@@ -76,6 +79,7 @@ export function renderDepositScreen(state: AppState): string[] {
         lines.push(center(`${num}  ${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${t.cyan}${t.underline}${tx}${t.reset}`, width));
       }
     } else {
+      lines.push("");
       lines.push(center(`${t.gray}${t.dim}No recent deposits${t.reset}`, width));
     }
 
@@ -131,23 +135,31 @@ export function renderWithdrawScreen(state: AppState): string[] {
     }
 
     // Withdrawal history — only shown when address is empty
-    if (w.withdrawAddress === "" && w.withdrawals.length > 0) {
+    if (w.withdrawAddress === "") {
       lines.push("");
       lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
       lines.push(center(`${t.white}${t.bold}Recent withdrawals${t.reset}`, width));
-      lines.push(center(`${t.gray}${t.dim}1-5 reuse address  ·  !@#$% view tx on basescan${t.reset}`, width));
-      lines.push("");
+      if (!w.withdrawalsLoaded) {
+        lines.push("");
+        lines.push(center(`${t.cyan}Loading recent withdrawals...${t.reset}`, width));
+      } else if (w.withdrawals.length > 0) {
+        lines.push(center(`${t.gray}${t.dim}1-5 reuse address  ·  !@#$% view tx on basescan${t.reset}`, width));
+        lines.push("");
 
-      const shown = w.withdrawals.slice(0, 5);
-      const shiftDigits = ["!", "@", "#", "$", "%"];
-      for (let i = 0; i < shown.length; i++) {
-        const wd = shown[i]!;
-        const amt = formatUsdc(wd.amount);
-        const to = shortAddr(wd.to);
-        const tx = shortTx(wd.tx_hash);
-        const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
-        const shiftKey = `${t.magenta}${t.bold}[${shiftDigits[i]}]${t.reset}`;
-        lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${shiftKey} ${t.cyan}${t.underline}${tx}${t.reset}`, width));
+        const shown = w.withdrawals.slice(0, 5);
+        const shiftDigits = ["!", "@", "#", "$", "%"];
+        for (let i = 0; i < shown.length; i++) {
+          const wd = shown[i]!;
+          const amt = formatUsdc(wd.amount);
+          const to = shortAddr(wd.to);
+          const tx = shortTx(wd.tx_hash);
+          const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
+          const shiftKey = `${t.magenta}${t.bold}[${shiftDigits[i]}]${t.reset}`;
+          lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${shiftKey} ${t.cyan}${t.underline}${tx}${t.reset}`, width));
+        }
+      } else {
+        lines.push("");
+        lines.push(center(`${t.gray}${t.dim}No recent withdrawals${t.reset}`, width));
       }
     }
   } else if (w.withdrawPhase === "amount-input") {

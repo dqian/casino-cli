@@ -57,7 +57,9 @@ export interface WalletState {
   usdcBalance: string; // raw base units
   copied: boolean;
   deposits: DepositEntry[];
+  depositsLoaded: boolean;
   withdrawals: WithdrawalEntry[];
+  withdrawalsLoaded: boolean;
   pollTimer: ReturnType<typeof setInterval> | null;
   // Withdraw
   withdrawPhase: WithdrawPhase;

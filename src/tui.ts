@@ -154,7 +154,9 @@ function createState(): AppState {
       usdcBalance: "0",
       copied: false,
       deposits: [],
+      depositsLoaded: false,
       withdrawals: [],
+      withdrawalsLoaded: false,
       pollTimer: null,
       withdrawPhase: "address-input",
       withdrawAddress: "",
@@ -392,6 +394,8 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.wallet.withdrawCode = "";
           state.wallet.txHash = "";
           state.wallet.error = "";
+          state.wallet.withdrawalsLoaded = false;
+          state.wallet.withdrawals = [];
           // Refresh USDC balance and withdrawal history
           import("./auth/client").then(({ getWalletBalance, getWalletWithdrawals }) => {
             getWalletBalance(state.auth.token).then((res) => {
@@ -407,8 +411,12 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
                 amount: t.amount,
                 tx_hash: t.tx_hash,
               }));
+              state.wallet.withdrawalsLoaded = true;
               render();
-            }).catch(() => {});
+            }).catch(() => {
+              state.wallet.withdrawalsLoaded = true;
+              render();
+            });
           });
         }
       }
