@@ -165,9 +165,10 @@ export async function verifySession(state: AppState): Promise<boolean> {
   }
 }
 
-/** Sync balance to server (fire-and-forget). */
+/** Sync play money balance to server (fire-and-forget). Real money balance is on-chain. */
 export function syncBalanceToServer(state: AppState): void {
   if (!state.auth.loggedIn || !state.auth.token) return;
+  if (state.moneyMode === "real") return; // real money balance comes from on-chain USDC
   syncBalance(state.auth.token, Math.round(state.balance * 100)).catch(() => {});
 }
 
