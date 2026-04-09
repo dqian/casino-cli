@@ -180,7 +180,7 @@ export function syncBalanceToServer(state: AppState): void {
   syncBalance(state.auth.token, Math.round(state.balance * 100)).catch(() => {});
 }
 
-/** Server-side balance reset with throttle. */
+/** Server-side play money balance reset. */
 export async function serverResetBalance(state: AppState, render: () => void): Promise<void> {
   if (!state.auth.loggedIn || !state.auth.token) {
     state.balance = 1000;
