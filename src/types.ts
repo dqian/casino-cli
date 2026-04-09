@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options" | "login";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options" | "login" | "deposit" | "withdraw";
 
 export type MenuItem = {
   name: string;
@@ -35,6 +35,22 @@ export interface AuthState {
   error: string;
 }
 
+export type WalletPhase = "loading" | "ready" | "error";
+export type WithdrawPhase = "address-input" | "amount-input" | "confirm" | "sending" | "success" | "error";
+
+export interface WalletState {
+  // Deposit
+  depositPhase: WalletPhase;
+  walletAddress: string;
+  usdcBalance: string; // raw base units
+  // Withdraw
+  withdrawPhase: WithdrawPhase;
+  withdrawAddress: string;
+  withdrawAmount: string;
+  txHash: string;
+  error: string;
+}
+
 export interface AppState {
   screen: Screen;
   balance: number;
@@ -50,6 +66,7 @@ export interface AppState {
   options: GameOptions;
   optionsCursor: number;
   auth: AuthState;
+  wallet: WalletState;
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result";

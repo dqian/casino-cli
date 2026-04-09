@@ -3,6 +3,7 @@ import * as t from "./theme";
 import { GAMES } from "./tui";
 import { sliceAnsi } from "./shared/render";
 import { renderLoginScreen } from "./auth/renderer";
+import { renderDepositScreen, renderWithdrawScreen } from "./wallet/renderer";
 
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
@@ -25,6 +26,16 @@ export function renderScreen(state: AppState): void {
     const { rows: height } = process.stdout;
     const lines = renderLoginScreen(state);
     writeLines(lines, height);
+    return;
+  }
+  if (state.screen === "deposit") {
+    const { rows: height } = process.stdout;
+    writeLines(renderDepositScreen(state), height);
+    return;
+  }
+  if (state.screen === "withdraw") {
+    const { rows: height } = process.stdout;
+    writeLines(renderWithdrawScreen(state), height);
     return;
   }
   renderMenuScreen(state);
@@ -146,7 +157,7 @@ function renderMenuScreen(state: AppState): void {
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"
       ? [{ key: "r", label: "Reset balance" }]
-      : [{ key: "d", label: "Deposit" }]),
+      : [{ key: "d", label: "Deposit" }, { key: "w", label: "Withdraw" }]),
     { key: "q", label: "Quit" },
   ];
   const maxKey = Math.max(...menuKeys.map(h => h.key.length));

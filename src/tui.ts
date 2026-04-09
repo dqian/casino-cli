@@ -16,6 +16,7 @@ import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
 import { createCrapsState } from "./craps/game";
 import { handleLoginKey, verifySession, syncBalanceToServer, serverResetBalance } from "./auth/handler";
 import { loadAuth, clearAuth } from "./auth/store";
+import { handleDepositKey, handleWithdrawKey, loadWallet } from "./wallet/handler";
 
 // --- Game registry ---
 
@@ -147,6 +148,16 @@ function createState(): AppState {
     options,
     optionsCursor: 0,
     auth: createAuthState(),
+    wallet: {
+      depositPhase: "loading",
+      walletAddress: "",
+      usdcBalance: "0",
+      withdrawPhase: "address-input",
+      withdrawAddress: "",
+      withdrawAmount: "",
+      txHash: "",
+      error: "",
+    },
   };
 }
 
@@ -228,6 +239,10 @@ export function startTui(): void {
       handleOptionsKey(state, key);
     } else if (state.screen === "login") {
       handleLoginKey(state, key, render);
+    } else if (state.screen === "deposit") {
+      handleDepositKey(state, key, render);
+    } else if (state.screen === "withdraw") {
+      handleWithdrawKey(state, key, render);
     }
 
     // Sync balance to server whenever it changes
@@ -325,7 +340,26 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "d":
       if (state.moneyMode === "real") {
-        state.message = "Deposits coming soon!";
+        if (!state.auth.loggedIn) {
+          state.message = "Sign in to deposit";
+        } else {
+          state.screen = "deposit";
+          loadWallet(state, render);
+        }
+      }
+      break;
+    case "w":
+      if (state.moneyMode === "real") {
+        if (!state.auth.loggedIn) {
+          state.message = "Sign in to withdraw";
+        } else {
+          state.screen = "withdraw";
+          state.wallet.withdrawPhase = "address-input";
+          state.wallet.withdrawAddress = "";
+          state.wallet.withdrawAmount = "";
+          state.wallet.txHash = "";
+          state.wallet.error = "";
+        }
       }
       break;
     case "q":

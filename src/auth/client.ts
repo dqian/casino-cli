@@ -84,3 +84,26 @@ export async function syncBalance(token: string, balance: number): Promise<Balan
 export async function resetBalance(token: string): Promise<BalanceResponse> {
   return post("/balance/reset", {}, token);
 }
+
+// Wallet
+
+export interface WalletResponse {
+  wallet_address?: string;
+  usdc_balance?: string; // base units (6 decimals)
+  error?: string;
+}
+
+export interface WithdrawResponse {
+  ok?: boolean;
+  tx_hash?: string;
+  error?: string;
+  available?: string;
+}
+
+export async function getWallet(token: string): Promise<WalletResponse> {
+  return get("/wallet", token);
+}
+
+export async function withdraw(token: string, to: string, amount: string): Promise<WithdrawResponse> {
+  return post("/wallet/withdraw", { to, amount }, token);
+}
