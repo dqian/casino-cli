@@ -1,6 +1,7 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
 import { getWallet, getWalletBalance, getWalletDeposits, withdrawRequest, withdrawConfirm } from "../auth/client";
+import { validateEvmAddress } from "./address";
 import { spawn } from "node:child_process";
 
 const MAX_ADDRESS_LENGTH = 42; // 0x + 40 hex chars
@@ -86,14 +87,20 @@ export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => 
 function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void): void {
   const w = state.wallet;
 
-  if (key.name === "return" && /^0x[0-9a-fA-F]{40}$/.test(w.withdrawAddress)) {
-    w.withdrawPhase = "amount-input";
-    w.error = "";
+  if (key.name === "return") {
+    const result = validateEvmAddress(w.withdrawAddress);
+    if (result.valid) {
+      w.withdrawPhase = "amount-input";
+      w.error = "";
+    } else {
+      w.error = result.reason;
+    }
     return;
   }
 
   if (key.name === "backspace") {
     w.withdrawAddress = w.withdrawAddress.slice(0, -1);
+    w.error = "";
     return;
   }
 
@@ -105,6 +112,7 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
         w.withdrawAddress += ch;
       }
     }
+    w.error = "";
   }
 }
 
@@ -124,6 +132,17 @@ function handleAmountInput(state: AppState, key: KeyEvent, render: () => void): 
 
   if (key.name === "backspace") {
     w.withdrawAmount = w.withdrawAmount.slice(0, -1);
+    return;
+  }
+
+  // 'm' for MAX — fill full USDC balance
+  if (key.name === "m") {
+    const raw = BigInt(w.usdcBalance || "0");
+    const whole = raw / 1_000_000n;
+    const frac = raw % 1_000_000n;
+    const fracStr = frac.toString().padStart(6, "0").replace(/0+$/, "");
+    w.withdrawAmount = fracStr ? `${whole}.${fracStr}` : `${whole}`;
+    w.error = "";
     return;
   }
 

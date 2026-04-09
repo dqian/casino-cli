@@ -117,13 +117,14 @@ export function renderWithdrawScreen(state: AppState): string[] {
     lines.push(center(field, width));
     lines.push("");
 
-    const valid = /^0x[0-9a-fA-F]{40}$/.test(w.withdrawAddress);
-    if (w.withdrawAddress.length > 0 && !valid) {
-      lines.push(center(`${t.gray}${t.dim}Enter a valid 0x address (42 chars)${t.reset}`, width));
-    } else if (valid) {
-      lines.push(center(`${t.green}Press Enter to continue${t.reset}`, width));
-    } else {
+    if (w.error) {
+      lines.push(center(`${t.red}${w.error}${t.reset}`, width));
+    } else if (w.withdrawAddress.length === 0) {
       lines.push(center(`${t.gray}Paste or type a 0x address${t.reset}`, width));
+    } else if (w.withdrawAddress.length < 42) {
+      lines.push(center(`${t.gray}${t.dim}Keep typing... (${w.withdrawAddress.length}/42)${t.reset}`, width));
+    } else {
+      lines.push(center(`${t.green}Press Enter to continue${t.reset}`, width));
     }
   } else if (w.withdrawPhase === "amount-input") {
     lines.push(center(`${t.white}To: ${t.cyan}${w.withdrawAddress}${t.reset}`, width));
@@ -137,6 +138,11 @@ export function renderWithdrawScreen(state: AppState): string[] {
     const padding = Math.max(0, inputWidth - display.length - 1);
     const field = `${t.dim}[${t.reset} ${t.brightWhite}$${display}${cursor}${" ".repeat(padding)}${t.reset}${t.dim}]${t.reset}`;
     lines.push(center(field, width));
+    lines.push("");
+
+    // Show USDC balance + MAX link
+    const displayBalance = formatUsdc(w.usdcBalance);
+    lines.push(center(`${t.gray}Available: ${t.green}$${displayBalance}${t.reset}   ${t.cyan}${t.underline}[m] MAX${t.reset}`, width));
 
     if (w.error) {
       lines.push("");

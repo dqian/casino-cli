@@ -391,6 +391,15 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.wallet.withdrawCode = "";
           state.wallet.txHash = "";
           state.wallet.error = "";
+          // Refresh USDC balance for MAX button
+          import("./auth/client").then(({ getWalletBalance }) => {
+            getWalletBalance(state.auth.token).then((res) => {
+              if (res.usdc_balance) {
+                state.wallet.usdcBalance = res.usdc_balance;
+                render();
+              }
+            }).catch(() => {});
+          });
         }
       }
       break;
