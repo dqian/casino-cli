@@ -7,6 +7,15 @@ function center(text: string, width: number): string {
   return " ".repeat(pad) + text;
 }
 
+/** Wrap text in an OSC 8 hyperlink — clickable in most modern terminals (iTerm2, Kitty, etc). */
+function link(url: string, text: string): string {
+  return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;
+}
+
+function basescanTx(hash: string): string {
+  return `https://basescan.org/tx/${hash}`;
+}
+
 /** Wrap plain text (no ANSI codes) to a max width, breaking on word boundaries. */
 function wrapText(text: string, maxWidth: number): string[] {
   if (text.length <= maxWidth) return [text];
@@ -99,17 +108,17 @@ export function renderDepositScreen(state: AppState): string[] {
       lines.push("");
       lines.push(center(`${t.cyan}Loading recent deposits...${t.reset}`, width));
     } else if (w.deposits.length > 0) {
-      lines.push(center(`${t.gray}${t.dim}Press 1-5 to view tx on basescan${t.reset}`, width));
+      lines.push(center(`${t.gray}${t.dim}Click any tx hash to view on basescan${t.reset}`, width));
       lines.push("");
 
-      const shown = w.deposits.slice(-5).reverse(); // last 5, newest first
+      const shown = w.deposits.slice(0, 5); // newest first (server order)
       for (let i = 0; i < shown.length; i++) {
         const dep = shown[i]!;
         const amt = formatUsdc(dep.amount);
         const from = shortAddr(dep.from);
         const tx = shortTx(dep.tx_hash);
-        const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
-        lines.push(center(`${num}  ${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${t.cyan}${t.underline}${tx}${t.reset}`, width));
+        const txLink = link(basescanTx(dep.tx_hash), `${t.cyan}${t.underline}${tx}${t.reset}`);
+        lines.push(center(`${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${txLink}`, width));
       }
     } else {
       lines.push("");
@@ -176,19 +185,18 @@ export function renderWithdrawScreen(state: AppState): string[] {
         lines.push("");
         lines.push(center(`${t.cyan}Loading recent withdrawals...${t.reset}`, width));
       } else if (w.withdrawals.length > 0) {
-        lines.push(center(`${t.gray}${t.dim}1-5 reuse address  ·  !@#$% view tx on basescan${t.reset}`, width));
+        lines.push(center(`${t.gray}${t.dim}Press 1-5 to reuse address · click tx to view on basescan${t.reset}`, width));
         lines.push("");
 
         const shown = w.withdrawals.slice(0, 5);
-        const shiftDigits = ["!", "@", "#", "$", "%"];
         for (let i = 0; i < shown.length; i++) {
           const wd = shown[i]!;
           const amt = formatUsdc(wd.amount);
           const to = shortAddr(wd.to);
           const tx = shortTx(wd.tx_hash);
           const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
-          const shiftKey = `${t.magenta}${t.bold}[${shiftDigits[i]}]${t.reset}`;
-          lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${shiftKey} ${t.cyan}${t.underline}${tx}${t.reset}`, width));
+          const txLink = link(basescanTx(wd.tx_hash), `${t.cyan}${t.underline}${tx}${t.reset}`);
+          lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${txLink}`, width));
         }
       } else {
         lines.push("");
