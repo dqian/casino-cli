@@ -69,6 +69,7 @@ export function renderLoginScreen(state: AppState): string[] {
       lines.push(center(`${t.cyan}Verifying...${t.reset}`));
     } else {
       lines.push(center(`${t.gray}Enter the 6-digit code from your email${t.reset}`));
+      lines.push(center(`${t.gray}${t.dim}(check your spam folder if you don't see it)${t.reset}`));
     }
 
     if (auth.error) {

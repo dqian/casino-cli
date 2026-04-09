@@ -200,6 +200,7 @@ export function renderWithdrawScreen(state: AppState): string[] {
     lines.push(center(`${t.white}Withdrawing ${t.green}${t.bold}$${parsed.toFixed(2)} USDC${t.reset}${t.white} to ${t.cyan}${w.withdrawAddress}${t.reset}`, width));
     lines.push("");
     lines.push(center(`${t.white}Enter the 6-digit code sent to your email:${t.reset}`, width));
+    lines.push(center(`${t.gray}${t.dim}(check your spam folder if you don't see it)${t.reset}`, width));
     lines.push("");
 
     // 6-digit code display
