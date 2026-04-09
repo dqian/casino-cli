@@ -7,6 +7,39 @@ function center(text: string, width: number): string {
   return " ".repeat(pad) + text;
 }
 
+/** Wrap plain text (no ANSI codes) to a max width, breaking on word boundaries. */
+function wrapText(text: string, maxWidth: number): string[] {
+  if (text.length <= maxWidth) return [text];
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    // If a single word is longer than maxWidth, hard-break it
+    if (word.length > maxWidth) {
+      if (current) { lines.push(current); current = ""; }
+      for (let i = 0; i < word.length; i += maxWidth) {
+        const chunk = word.slice(i, i + maxWidth);
+        if (i + maxWidth >= word.length) {
+          current = chunk;
+        } else {
+          lines.push(chunk);
+        }
+      }
+      continue;
+    }
+    if (!current) {
+      current = word;
+    } else if (current.length + 1 + word.length <= maxWidth) {
+      current += " " + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines;
+}
+
 function formatUsdc(baseUnits: string): string {
   const raw = BigInt(baseUnits);
   const whole = raw / 1_000_000n;
@@ -232,7 +265,10 @@ export function renderWithdrawScreen(state: AppState): string[] {
     lines.push("");
     lines.push(center(`${t.gray}Press any key to continue${t.reset}`, width));
   } else if (w.withdrawPhase === "error") {
-    lines.push(center(`${t.red}${w.error}${t.reset}`, width));
+    const wrapWidth = Math.min(Math.max(20, width - 8), 80);
+    for (const line of wrapText(w.error, wrapWidth)) {
+      lines.push(center(`${t.red}${line}${t.reset}`, width));
+    }
     lines.push("");
     lines.push(center(`${t.gray}Press any key to continue${t.reset}`, width));
   }
