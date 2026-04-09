@@ -13,7 +13,7 @@ export function widthWarning(width: number, minWidth: number): string | null {
 }
 
 export function formatBalance(balance: number): string {
-  return `$${balance.toLocaleString()}`;
+  return `$${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function renderHeader(

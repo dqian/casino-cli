@@ -235,6 +235,12 @@ function handleWithdrawCode(state: AppState, key: KeyEvent, render: () => void):
       } else {
         w.withdrawPhase = "success";
         w.txHash = res.tx_hash || "";
+        // Optimistically subtract withdrawn amount from local USDC balance
+        const currentBase = BigInt(w.usdcBalance || "0");
+        const withdrawnBase = BigInt(baseUnits);
+        const newBalance = currentBase > withdrawnBase ? currentBase - withdrawnBase : 0n;
+        w.usdcBalance = newBalance.toString();
+        syncRealBalance(state);
       }
       render();
     }).catch(() => {

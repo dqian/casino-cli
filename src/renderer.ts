@@ -107,7 +107,8 @@ function renderMenuScreen(state: AppState): void {
     ? `${t.cyan}${t.bold}PLAY MONEY${t.reset}`
     : `${t.yellow}${t.bold}REAL MONEY${t.reset}`;
   lines.push(centerAnsiText(modeLabel, width));
-  const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${state.balance.toLocaleString()}${t.reset}`;
+  const balanceStr = state.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${balanceStr}${t.reset}`;
   lines.push(centerAnsiText(balanceLine, width));
   if (state.moneyMode === "real" && state.balance === 0) {
     lines.push(centerAnsiText(`${t.gray}Deposit to start playing${t.reset}`, width));
