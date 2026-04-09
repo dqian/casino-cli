@@ -124,10 +124,13 @@ function renderMenuScreen(state: AppState): void {
   for (let i = 0; i < MENU_ITEMS.length; i++) {
     const item = MENU_ITEMS[i]!;
     const selected = i === state.menuCursor;
-    const available = item.screen !== null;
-    const label = item.screen === "blackjack"
-      ? `${state.options.blackjack.numDecks}-Deck, 3:2`
-      : item.label;
+    const disabledByRealMode = state.moneyMode === "real" && item.screen !== null;
+    const available = item.screen !== null && !disabledByRealMode;
+    const label = disabledByRealMode
+      ? "Coming Soon"
+      : item.screen === "blackjack"
+        ? `${state.options.blackjack.numDecks}-Deck, 3:2`
+        : item.label;
 
     let line: string;
     if (selected && available) {

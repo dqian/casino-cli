@@ -40,7 +40,7 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
 export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => void): void {
   const w = state.wallet;
 
-  if (w.withdrawPhase === "sending") return;
+  if (w.withdrawPhase === "sending" || w.withdrawPhase === "code-sending") return;
 
   if (key.name === "escape") {
     if (w.withdrawPhase === "amount-input") {
@@ -101,7 +101,7 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
   if (!key.ctrl && key.raw.length >= 1) {
     for (const ch of key.raw) {
       if (w.withdrawAddress.length >= MAX_ADDRESS_LENGTH) break;
-      if (/[0-9a-fA-Fx]/.test(ch)) {
+      if (/[0-9a-fA-FxX]/.test(ch)) {
         w.withdrawAddress += ch;
       }
     }

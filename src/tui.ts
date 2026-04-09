@@ -272,7 +272,9 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "return": {
       const item = MENU_ITEMS[state.menuCursor]!;
-      if (item.screen) {
+      if (item.screen && state.moneyMode === "real") {
+        state.message = "Real money games coming soon!";
+      } else if (item.screen) {
         state.screen = item.screen;
         if (item.screen === "roulette") {
           state.roulette = createRouletteState(state.options);
