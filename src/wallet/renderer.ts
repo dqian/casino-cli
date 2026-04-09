@@ -269,7 +269,8 @@ export function renderWithdrawScreen(state: AppState): string[] {
   } else if (w.withdrawPhase === "success") {
     lines.push(center(`${t.green}${t.bold}Withdrawal sent!${t.reset}`, width));
     lines.push("");
-    lines.push(center(`${t.white}Tx: ${t.cyan}${w.txHash}${t.reset}`, width));
+    const txLink = link(basescanTx(w.txHash), `${t.cyan}${t.underline}${w.txHash}${t.reset}`);
+    lines.push(center(`${t.white}Tx: ${txLink}`, width));
     lines.push("");
     lines.push(center(`${t.gray}Press any key to continue${t.reset}`, width));
   } else if (w.withdrawPhase === "error") {

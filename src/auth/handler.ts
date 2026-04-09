@@ -1,6 +1,6 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { sendCode, verifyCode, getMe, syncBalance, resetBalance as apiResetBalance } from "./client";
+import { sendCode, verifyCode, getMe, syncBalance, resetBalance as apiResetBalance, getWalletBalance } from "./client";
 import { saveAuth, clearAuth } from "./store";
 
 const MAX_EMAIL_LENGTH = 254;
@@ -133,6 +133,14 @@ function submitCode(state: AppState, render: () => void): void {
     state.auth.codeInput = "";
     state.auth.error = "";
     render();
+
+    // Preload USDC balance so real money mode switch is instant (no flicker)
+    getWalletBalance(res.token).then((bal) => {
+      if (bal.usdc_balance) {
+        state.wallet.usdcBalance = bal.usdc_balance;
+        render();
+      }
+    }).catch(() => {});
   }).catch(() => {
     auth.phase = "error";
     auth.error = "Could not reach server";
