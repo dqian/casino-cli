@@ -15,12 +15,22 @@ function formatUsdc(baseUnits: string): string {
   return `${whole.toLocaleString()}.${fracStr.slice(0, 2).padEnd(2, "0")}`;
 }
 
+function shortAddr(addr: string): string {
+  if (addr.length <= 12) return addr;
+  return addr.slice(0, 6) + "..." + addr.slice(-4);
+}
+
+function shortTx(hash: string): string {
+  if (hash.length <= 16) return hash;
+  return hash.slice(0, 10) + "..." + hash.slice(-4);
+}
+
 export function renderDepositScreen(state: AppState): string[] {
   const { columns: width, rows: height } = process.stdout;
   const lines: string[] = [];
   const w = state.wallet;
 
-  const topPad = Math.max(1, Math.floor((height - 18) / 2));
+  const topPad = Math.max(1, Math.floor((height - 22) / 2));
   for (let i = 0; i < topPad; i++) lines.push("");
 
   lines.push(center(`${t.bold}${t.yellow}DEPOSIT${t.reset}`, width));
@@ -48,6 +58,25 @@ export function renderDepositScreen(state: AppState): string[] {
     const displayBalance = formatUsdc(w.usdcBalance);
     lines.push(center(`${t.white}USDC Balance: ${t.green}${t.bold}$${displayBalance}${t.reset}`, width));
     lines.push("");
+
+    // Recent deposits
+    if (w.deposits.length > 0) {
+      lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
+      lines.push(center(`${t.white}${t.bold}Recent deposits (24h)${t.reset}`, width));
+      lines.push("");
+
+      const shown = w.deposits.slice(-5).reverse(); // last 5, newest first
+      for (const dep of shown) {
+        const amt = formatUsdc(dep.amount);
+        const from = shortAddr(dep.from);
+        const tx = shortTx(dep.tx_hash);
+        lines.push(center(`${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${t.gray}tx ${t.dim}${tx}${t.reset}`, width));
+      }
+    } else {
+      lines.push(center(`${t.gray}${t.dim}No recent deposits${t.reset}`, width));
+    }
+
+    lines.push("");
     lines.push(center(`${t.gray}${t.dim}Only send USDC on Base chain. Other tokens or chains will be lost.${t.reset}`, width));
   }
 
@@ -56,7 +85,7 @@ export function renderDepositScreen(state: AppState): string[] {
 
   // Hotkeys
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
-  lines.push(`  ${t.white}${t.bold}c${t.reset}  ${t.gray}Copy address${t.reset}  ${t.white}${t.bold}r${t.reset}  ${t.gray}Refresh${t.reset}  ${t.white}${t.bold}Esc${t.reset}  ${t.gray}Back to menu${t.reset}`);
+  lines.push(`  ${t.white}${t.bold}c${t.reset}  ${t.gray}Copy address${t.reset}  ${t.white}${t.bold}r${t.reset}  ${t.gray}Refresh balance${t.reset}  ${t.white}${t.bold}Esc${t.reset}  ${t.gray}Back to menu${t.reset}`);
 
   while (lines.length < height) lines.push("");
   return lines;

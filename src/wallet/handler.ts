@@ -1,6 +1,6 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { getWallet, withdraw } from "../auth/client";
+import { getWallet, getWalletBalance, getWalletDeposits, withdraw } from "../auth/client";
 import { spawn } from "node:child_process";
 
 const MAX_ADDRESS_LENGTH = 42; // 0x + 40 hex chars
@@ -13,9 +13,9 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
     return;
   }
 
-  // 'r' to refresh balance
+  // 'r' to refresh balance only
   if (key.name === "r" && state.wallet.depositPhase === "ready") {
-    loadWallet(state, render);
+    refreshBalance(state, render);
     return;
   }
 
@@ -26,14 +26,6 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
     render();
     setTimeout(() => { state.wallet.copied = false; render(); }, 2000);
   }
-}
-
-function copyToClipboard(text: string): void {
-  const proc = process.platform === "darwin"
-    ? spawn("pbcopy")
-    : spawn("xclip", ["-selection", "clipboard"]);
-  proc.stdin.write(text);
-  proc.stdin.end();
 }
 
 export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => void): void {
@@ -69,7 +61,6 @@ export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => 
   } else if (w.withdrawPhase === "confirm") {
     handleConfirm(state, key, render);
   } else if (w.withdrawPhase === "success" || w.withdrawPhase === "error") {
-    // Any key returns to menu
     state.screen = "menu";
     resetWithdraw(state);
   }
@@ -89,7 +80,6 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
     return;
   }
 
-  // Accept hex chars and 'x' for 0x prefix
   if (key.raw.length === 1 && !key.ctrl && w.withdrawAddress.length < MAX_ADDRESS_LENGTH) {
     const ch = key.raw;
     if (/[0-9a-fA-Fx]/.test(ch)) {
@@ -117,7 +107,6 @@ function handleAmountInput(state: AppState, key: KeyEvent, render: () => void): 
     return;
   }
 
-  // Accept digits and single decimal point
   if (key.raw.length === 1 && !key.ctrl && w.withdrawAmount.length < 20) {
     const ch = key.raw;
     if (/[0-9]/.test(ch) || (ch === "." && !w.withdrawAmount.includes("."))) {
@@ -133,7 +122,6 @@ function handleConfirm(state: AppState, key: KeyEvent, render: () => void): void
     w.withdrawPhase = "sending";
     render();
 
-    // Convert USDC display amount to base units (6 decimals)
     const parsed = parseFloat(w.withdrawAmount);
     const baseUnits = Math.floor(parsed * 1_000_000).toString();
 
@@ -159,6 +147,7 @@ function handleConfirm(state: AppState, key: KeyEvent, render: () => void): void
   }
 }
 
+/** Full wallet load — address, balance, and recent deposits. */
 export function loadWallet(state: AppState, render: () => void): void {
   state.wallet.depositPhase = "loading";
   render();
@@ -167,17 +156,49 @@ export function loadWallet(state: AppState, render: () => void): void {
     if (res.error) {
       state.wallet.depositPhase = "error";
       state.wallet.error = res.error;
-    } else {
-      state.wallet.depositPhase = "ready";
-      state.wallet.walletAddress = res.wallet_address || "";
-      state.wallet.usdcBalance = res.usdc_balance || "0";
+      render();
+      return;
     }
+
+    state.wallet.walletAddress = res.wallet_address || "";
+    state.wallet.usdcBalance = res.usdc_balance || "0";
+    state.wallet.depositPhase = "ready";
     render();
+
+    // Load deposits in background
+    getWalletDeposits(state.auth.token).then((depRes) => {
+      state.wallet.deposits = (depRes.transfers || []).map((t) => ({
+        from: t.from,
+        amount: t.amount,
+        tx_hash: t.tx_hash,
+      }));
+      render();
+    }).catch(() => {});
   }).catch(() => {
     state.wallet.depositPhase = "error";
     state.wallet.error = "Could not reach server";
     render();
   });
+}
+
+/** Lightweight balance-only refresh. */
+function refreshBalance(state: AppState, render: () => void): void {
+  getWalletBalance(state.auth.token).then((res) => {
+    if (res.usdc_balance) {
+      state.wallet.usdcBalance = res.usdc_balance;
+    }
+    render();
+  }).catch(() => {});
+
+  // Also refresh deposits
+  getWalletDeposits(state.auth.token).then((res) => {
+    state.wallet.deposits = (res.transfers || []).map((t) => ({
+      from: t.from,
+      amount: t.amount,
+      tx_hash: t.tx_hash,
+    }));
+    render();
+  }).catch(() => {});
 }
 
 function resetWithdraw(state: AppState): void {
@@ -186,4 +207,12 @@ function resetWithdraw(state: AppState): void {
   state.wallet.withdrawAmount = "";
   state.wallet.txHash = "";
   state.wallet.error = "";
+}
+
+function copyToClipboard(text: string): void {
+  const proc = process.platform === "darwin"
+    ? spawn("pbcopy")
+    : spawn("xclip", ["-selection", "clipboard"]);
+  proc.stdin.write(text);
+  proc.stdin.end();
 }

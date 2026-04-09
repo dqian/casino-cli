@@ -38,12 +38,19 @@ export interface AuthState {
 export type WalletPhase = "loading" | "ready" | "error";
 export type WithdrawPhase = "address-input" | "amount-input" | "confirm" | "sending" | "success" | "error";
 
+export interface DepositEntry {
+  from: string;
+  amount: string; // base units
+  tx_hash: string;
+}
+
 export interface WalletState {
   // Deposit
   depositPhase: WalletPhase;
   walletAddress: string;
   usdcBalance: string; // raw base units
   copied: boolean;
+  deposits: DepositEntry[];
   // Withdraw
   withdrawPhase: WithdrawPhase;
   withdrawAddress: string;
