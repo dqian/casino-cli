@@ -167,8 +167,9 @@ function renderMenuScreen(state: AppState): void {
   ];
   const maxKeyL = Math.max(...leftCol.map(h => h.key.length));
   const maxLabelL = Math.max(...leftCol.map(h => h.label.length));
-  const maxKeyR = rightCol.length > 0 ? Math.max(...rightCol.map(h => h.key.length)) : 0;
-  const maxLabelR = rightCol.length > 0 ? Math.max(...rightCol.map(h => h.label.length)) : 0;
+  // Fixed widths so centering doesn't shift between modes
+  const maxKeyR = 1; // all right-col keys are single char (m, r, d, w)
+  const maxLabelR = "Reset balance".length;
   const gap = 4;
   const totalVisWidth = maxKeyL + 2 + maxLabelL + gap + maxKeyR + 2 + maxLabelR;
   const rows = Math.max(leftCol.length, rightCol.length);
