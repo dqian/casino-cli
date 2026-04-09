@@ -86,9 +86,12 @@ function handleCodeInput(state: AppState, key: KeyEvent, render: () => void): vo
     return;
   }
 
-  // Accept digits only
-  if (key.raw >= "0" && key.raw <= "9" && auth.codeInput.length < 6) {
-    auth.codeInput += key.raw;
+  // Accept digits only (handles paste too)
+  for (const ch of key.raw) {
+    if (auth.codeInput.length >= 6) break;
+    if (ch >= "0" && ch <= "9") {
+      auth.codeInput += ch;
+    }
   }
 
   // Auto-submit on 6th digit

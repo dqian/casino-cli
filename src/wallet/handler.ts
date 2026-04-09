@@ -178,9 +178,12 @@ function handleWithdrawCode(state: AppState, key: KeyEvent, render: () => void):
     return;
   }
 
-  // Accept digits only
-  if (key.raw >= "0" && key.raw <= "9" && w.withdrawCode.length < 6) {
-    w.withdrawCode += key.raw;
+  // Accept digits only (handles paste too)
+  for (const ch of key.raw) {
+    if (w.withdrawCode.length >= 6) break;
+    if (ch >= "0" && ch <= "9") {
+      w.withdrawCode += ch;
+    }
   }
 
   // Auto-submit on 6th digit
