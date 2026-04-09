@@ -10,7 +10,7 @@ export function handleLoginKey(state: AppState, key: KeyEvent, render: () => voi
 
   if (auth.phase === "sending" || auth.phase === "verifying") return; // ignore input during async ops
 
-  if (key.name === "escape" || (key.name === "q" && auth.phase === "email-input" && auth.emailInput === "")) {
+  if (key.name === "escape") {
     state.screen = "menu";
     state.auth.phase = "email-input";
     state.auth.emailInput = "";

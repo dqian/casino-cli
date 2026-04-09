@@ -148,23 +148,40 @@ function renderMenuScreen(state: AppState): void {
   lines.push(centerAnsiText(`${t.gray}${"─".repeat(40)}${t.reset}`, width));
   lines.push("");
 
-  // Hotkey grid as bottom border to menu options
-  const menuKeys: { key: string; label: string }[] = [
+  // Hotkey grid — two columns
+  const leftCol: { key: string; label: string }[] = [
     { key: "↑↓", label: "Select" },
     { key: "Enter", label: "Play" },
-    { key: "s", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
     { key: "o", label: "Options" },
+    { key: "s", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
+    { key: "q", label: "Quit" },
+  ];
+  const rightCol: { key: string; label: string }[] = [
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"
       ? [{ key: "r", label: "Reset balance" }]
-      : [{ key: "d", label: "Deposit" }, { key: "w", label: "Withdraw" }]),
-    { key: "q", label: "Quit" },
+      : []),
+    ...(state.moneyMode === "real"
+      ? [{ key: "d", label: "Deposit" }, { key: "w", label: "Withdraw" }]
+      : []),
   ];
-  const maxKey = Math.max(...menuKeys.map(h => h.key.length));
-  const maxLabel = "Reset balance".length; // fixed width to prevent layout shift
-  for (const h of menuKeys) {
-    const line = `${t.white}${t.bold}${h.key.padStart(maxKey)}${t.reset}  ${t.gray}${h.label.padEnd(maxLabel)}${t.reset}`;
-    lines.push(centerAnsiText(line, width));
+  const maxKeyL = Math.max(...leftCol.map(h => h.key.length));
+  const maxLabelL = Math.max(...leftCol.map(h => h.label.length));
+  const maxKeyR = Math.max(...rightCol.map(h => h.key.length));
+  const maxLabelR = Math.max(...rightCol.map(h => h.label.length));
+  const colWidth = maxKeyL + 2 + maxLabelL;
+  const gap = 4;
+  const rows = Math.max(leftCol.length, rightCol.length);
+  for (let i = 0; i < rows; i++) {
+    const l = leftCol[i];
+    const r = rightCol[i];
+    const lStr = l
+      ? `${t.white}${t.bold}${l.key.padStart(maxKeyL)}${t.reset}  ${t.gray}${l.label.padEnd(maxLabelL)}${t.reset}`
+      : " ".repeat(colWidth);
+    const rStr = r
+      ? `${t.white}${t.bold}${r.key.padStart(maxKeyR)}${t.reset}  ${t.gray}${r.label.padEnd(maxLabelR)}${t.reset}`
+      : "";
+    lines.push(centerAnsiText(lStr + " ".repeat(gap) + rStr, width));
   }
 
   if (state.message) {
