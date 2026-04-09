@@ -167,21 +167,21 @@ function renderMenuScreen(state: AppState): void {
   ];
   const maxKeyL = Math.max(...leftCol.map(h => h.key.length));
   const maxLabelL = Math.max(...leftCol.map(h => h.label.length));
-  const maxKeyR = Math.max(...rightCol.map(h => h.key.length));
-  const maxLabelR = Math.max(...rightCol.map(h => h.label.length));
-  const colWidth = maxKeyL + 2 + maxLabelL;
+  const maxKeyR = rightCol.length > 0 ? Math.max(...rightCol.map(h => h.key.length)) : 0;
+  const maxLabelR = rightCol.length > 0 ? Math.max(...rightCol.map(h => h.label.length)) : 0;
   const gap = 4;
+  const totalVisWidth = maxKeyL + 2 + maxLabelL + gap + maxKeyR + 2 + maxLabelR;
   const rows = Math.max(leftCol.length, rightCol.length);
   for (let i = 0; i < rows; i++) {
     const l = leftCol[i];
     const r = rightCol[i];
     const lStr = l
       ? `${t.white}${t.bold}${l.key.padStart(maxKeyL)}${t.reset}  ${t.gray}${l.label.padEnd(maxLabelL)}${t.reset}`
-      : " ".repeat(colWidth);
+      : " ".repeat(maxKeyL + 2 + maxLabelL);
     const rStr = r
-      ? `${t.white}${t.bold}${r.key.padStart(maxKeyR)}${t.reset}  ${t.gray}${r.label.padEnd(maxLabelR)}${t.reset}`
-      : "";
-    lines.push(centerAnsiText(lStr + " ".repeat(gap) + rStr, width));
+      ? `${" ".repeat(gap)}${t.white}${t.bold}${r.key.padStart(maxKeyR)}${t.reset}  ${t.gray}${r.label.padEnd(maxLabelR)}${t.reset}`
+      : " ".repeat(gap + maxKeyR + 2 + maxLabelR);
+    lines.push(centerAnsiText(lStr + rStr, width));
   }
 
   if (state.message) {
