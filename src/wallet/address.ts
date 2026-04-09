@@ -1,4 +1,4 @@
-import { keccak_256 } from "@noble/hashes/sha3";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
