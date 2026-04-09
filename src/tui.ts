@@ -192,7 +192,18 @@ export function startTui(): void {
 
   // If we have a saved session, verify it in the background
   if (state.auth.loggedIn) {
-    verifySession(state).then(() => render());
+    verifySession(state).then(() => {
+      // Preload USDC balance so real money balance is instantly available on mode switch
+      import("./auth/client").then(({ getWalletBalance }) => {
+        getWalletBalance(state.auth.token).then((res) => {
+          if (res.usdc_balance) {
+            state.wallet.usdcBalance = res.usdc_balance;
+            render();
+          }
+        }).catch(() => {});
+      });
+      render();
+    });
   }
 
   // Animate menu (shimmer + cursor)
@@ -326,17 +337,17 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
     case "m":
       if (state.moneyMode === "play") {
         state.moneyMode = "real";
-        // Real money balance = on-chain USDC balance
-        const usdcUnits = BigInt(state.wallet.usdcBalance || "0");
-        state.balance = Number(usdcUnits) / 1_000_000;
+        state.balance = Number(BigInt(state.wallet.usdcBalance || "0")) / 1_000_000;
         state.message = "Switched to Real Money mode";
-        // Fetch latest balance if logged in
+        // Refresh in background
         if (state.auth.loggedIn) {
           import("./auth/client").then(({ getWalletBalance }) => {
             getWalletBalance(state.auth.token).then((res) => {
               if (res.usdc_balance) {
                 state.wallet.usdcBalance = res.usdc_balance;
-                state.balance = Number(BigInt(res.usdc_balance)) / 1_000_000;
+                if (state.moneyMode === "real") {
+                  state.balance = Number(BigInt(res.usdc_balance)) / 1_000_000;
+                }
                 render();
               }
             }).catch(() => {});
