@@ -38,6 +38,10 @@ export function renderDepositScreen(state: AppState): string[] {
     lines.push(center(`${t.white}Your deposit address (Base):${t.reset}`, width));
     lines.push("");
     lines.push(center(`${t.green}${t.bold}${w.walletAddress}${t.reset}`, width));
+    const copyLabel = w.copied
+      ? `${t.green}${t.bold}Copied!${t.reset}`
+      : `${t.cyan}${t.underline}[c] Copy address${t.reset}`;
+    lines.push(center(copyLabel, width));
     lines.push("");
 
     // Balance
@@ -52,7 +56,7 @@ export function renderDepositScreen(state: AppState): string[] {
 
   // Hotkeys
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
-  lines.push(`  ${t.white}${t.bold}r${t.reset}  ${t.gray}Refresh${t.reset}  ${t.white}${t.bold}Esc${t.reset}  ${t.gray}Back to menu${t.reset}`);
+  lines.push(`  ${t.white}${t.bold}c${t.reset}  ${t.gray}Copy address${t.reset}  ${t.white}${t.bold}r${t.reset}  ${t.gray}Refresh${t.reset}  ${t.white}${t.bold}Esc${t.reset}  ${t.gray}Back to menu${t.reset}`);
 
   while (lines.length < height) lines.push("");
   return lines;

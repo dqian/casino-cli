@@ -1,6 +1,7 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
 import { getWallet, withdraw } from "../auth/client";
+import { spawn } from "node:child_process";
 
 const MAX_ADDRESS_LENGTH = 42; // 0x + 40 hex chars
 
@@ -15,7 +16,24 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
   // 'r' to refresh balance
   if (key.name === "r" && state.wallet.depositPhase === "ready") {
     loadWallet(state, render);
+    return;
   }
+
+  // 'c' or Enter to copy address
+  if ((key.name === "c" || key.name === "return") && state.wallet.depositPhase === "ready" && state.wallet.walletAddress) {
+    copyToClipboard(state.wallet.walletAddress);
+    state.wallet.copied = true;
+    render();
+    setTimeout(() => { state.wallet.copied = false; render(); }, 2000);
+  }
+}
+
+function copyToClipboard(text: string): void {
+  const proc = process.platform === "darwin"
+    ? spawn("pbcopy")
+    : spawn("xclip", ["-selection", "clipboard"]);
+  proc.stdin.write(text);
+  proc.stdin.end();
 }
 
 export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => void): void {

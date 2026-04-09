@@ -152,6 +152,7 @@ function createState(): AppState {
       depositPhase: "loading",
       walletAddress: "",
       usdcBalance: "0",
+      copied: false,
       withdrawPhase: "address-input",
       withdrawAddress: "",
       withdrawAmount: "",

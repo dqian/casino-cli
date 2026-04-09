@@ -43,6 +43,7 @@ export interface WalletState {
   depositPhase: WalletPhase;
   walletAddress: string;
   usdcBalance: string; // raw base units
+  copied: boolean;
   // Withdraw
   withdrawPhase: WithdrawPhase;
   withdrawAddress: string;
