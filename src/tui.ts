@@ -323,8 +323,22 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
     case "m":
       if (state.moneyMode === "play") {
         state.moneyMode = "real";
-        state.balance = 0;
+        // Real money balance = on-chain USDC balance
+        const usdcUnits = BigInt(state.wallet.usdcBalance || "0");
+        state.balance = Number(usdcUnits) / 1_000_000;
         state.message = "Switched to Real Money mode";
+        // Fetch latest balance if logged in
+        if (state.auth.loggedIn) {
+          import("./auth/client").then(({ getWalletBalance }) => {
+            getWalletBalance(state.auth.token).then((res) => {
+              if (res.usdc_balance) {
+                state.wallet.usdcBalance = res.usdc_balance;
+                state.balance = Number(BigInt(res.usdc_balance)) / 1_000_000;
+                render();
+              }
+            }).catch(() => {});
+          });
+        }
       } else {
         state.moneyMode = "play";
         state.balance = 1000;

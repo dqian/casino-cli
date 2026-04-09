@@ -5,6 +5,14 @@ import { spawn } from "node:child_process";
 
 const MAX_ADDRESS_LENGTH = 42; // 0x + 40 hex chars
 
+/** Sync real money balance from on-chain USDC balance. */
+function syncRealBalance(state: AppState): void {
+  if (state.moneyMode === "real") {
+    const baseUnits = BigInt(state.wallet.usdcBalance || "0");
+    state.balance = Number(baseUnits) / 1_000_000;
+  }
+}
+
 export function handleDepositKey(state: AppState, key: KeyEvent, render: () => void): void {
   if (state.wallet.depositPhase === "loading") return;
 
@@ -174,6 +182,7 @@ export function loadWallet(state: AppState, render: () => void): void {
     state.wallet.walletAddress = res.wallet_address || "";
     state.wallet.usdcBalance = res.usdc_balance || "0";
     state.wallet.depositPhase = "ready";
+    syncRealBalance(state);
     render();
 
     // Load deposits in background
@@ -197,6 +206,7 @@ function refreshBalance(state: AppState, render: () => void): void {
   getWalletBalance(state.auth.token).then((res) => {
     if (res.usdc_balance) {
       state.wallet.usdcBalance = res.usdc_balance;
+      syncRealBalance(state);
     }
     render();
   }).catch(() => {});
