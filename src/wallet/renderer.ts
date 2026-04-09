@@ -151,6 +151,35 @@ export function renderWithdrawScreen(state: AppState): string[] {
     lines.push(center(`${t.white}Chain:  ${t.blue}Base${t.reset}`, width));
     lines.push("");
     lines.push(center(`${t.yellow}${t.bold}Send? (y/n)${t.reset}`, width));
+  } else if (w.withdrawPhase === "code-sending") {
+    lines.push(center(`${t.cyan}Sending confirmation code to your email...${t.reset}`, width));
+  } else if (w.withdrawPhase === "code-input") {
+    const parsed = parseFloat(w.withdrawAmount);
+    lines.push(center(`${t.white}Withdrawing ${t.green}${t.bold}$${parsed.toFixed(2)} USDC${t.reset}${t.white} to ${t.cyan}${w.withdrawAddress}${t.reset}`, width));
+    lines.push("");
+    lines.push(center(`${t.white}Enter the 6-digit code sent to your email:${t.reset}`, width));
+    lines.push("");
+
+    // 6-digit code display
+    const digits = w.withdrawCode.padEnd(6, " ");
+    let codeDisplay = "";
+    for (let i = 0; i < 6; i++) {
+      const ch = digits[i]!;
+      if (ch !== " ") {
+        codeDisplay += ` ${t.brightWhite}${t.bold}${ch}${t.reset} `;
+      } else if (i === w.withdrawCode.length) {
+        codeDisplay += ` ${t.brightWhite}${t.bold}_${t.reset} `;
+      } else {
+        codeDisplay += ` ${t.gray}·${t.reset} `;
+      }
+      if (i < 5) codeDisplay += " ";
+    }
+    lines.push(center(codeDisplay, width));
+
+    if (w.error) {
+      lines.push("");
+      lines.push(center(`${t.red}${w.error}${t.reset}`, width));
+    }
   } else if (w.withdrawPhase === "sending") {
     lines.push(center(`${t.cyan}Sending transaction...${t.reset}`, width));
   } else if (w.withdrawPhase === "success") {
@@ -170,7 +199,7 @@ export function renderWithdrawScreen(state: AppState): string[] {
 
   // Hotkeys
   lines.push(`  ${t.gray}${"─".repeat(Math.max(0, width - 4))}${t.reset}`);
-  if (w.withdrawPhase === "address-input" || w.withdrawPhase === "amount-input") {
+  if (w.withdrawPhase === "address-input" || w.withdrawPhase === "amount-input" || w.withdrawPhase === "code-input") {
     lines.push(`  ${t.white}${t.bold}Esc${t.reset}  ${t.gray}Back${t.reset}`);
   } else {
     lines.push("");

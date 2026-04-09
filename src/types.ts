@@ -36,7 +36,7 @@ export interface AuthState {
 }
 
 export type WalletPhase = "loading" | "ready" | "error";
-export type WithdrawPhase = "address-input" | "amount-input" | "confirm" | "sending" | "success" | "error";
+export type WithdrawPhase = "address-input" | "amount-input" | "confirm" | "code-sending" | "code-input" | "sending" | "success" | "error";
 
 export interface DepositEntry {
   from: string;
@@ -56,6 +56,7 @@ export interface WalletState {
   withdrawPhase: WithdrawPhase;
   withdrawAddress: string;
   withdrawAmount: string;
+  withdrawCode: string;
   txHash: string;
   error: string;
 }

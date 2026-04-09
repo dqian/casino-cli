@@ -1,6 +1,6 @@
 import type { AppState } from "../types";
 import type { KeyEvent } from "../keybindings";
-import { getWallet, getWalletBalance, getWalletDeposits, withdraw } from "../auth/client";
+import { getWallet, getWalletBalance, getWalletDeposits, withdrawRequest, withdrawConfirm } from "../auth/client";
 import { spawn } from "node:child_process";
 
 const MAX_ADDRESS_LENGTH = 42; // 0x + 40 hex chars
@@ -52,6 +52,12 @@ export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => 
       w.withdrawPhase = "amount-input";
       return;
     }
+    if (w.withdrawPhase === "code-input") {
+      w.withdrawPhase = "confirm";
+      w.withdrawCode = "";
+      w.error = "";
+      return;
+    }
     state.screen = "menu";
     resetWithdraw(state);
     return;
@@ -69,6 +75,8 @@ export function handleWithdrawKey(state: AppState, key: KeyEvent, render: () => 
     handleAmountInput(state, key, render);
   } else if (w.withdrawPhase === "confirm") {
     handleConfirm(state, key, render);
+  } else if (w.withdrawPhase === "code-input") {
+    handleWithdrawCode(state, key, render);
   } else if (w.withdrawPhase === "success" || w.withdrawPhase === "error") {
     state.screen = "menu";
     resetWithdraw(state);
@@ -128,19 +136,20 @@ function handleConfirm(state: AppState, key: KeyEvent, render: () => void): void
   const w = state.wallet;
 
   if (key.name === "y" || key.name === "Y") {
-    w.withdrawPhase = "sending";
+    w.withdrawPhase = "code-sending";
     render();
 
     const parsed = parseFloat(w.withdrawAmount);
     const baseUnits = Math.floor(parsed * 1_000_000).toString();
 
-    withdraw(state.auth.token, w.withdrawAddress, baseUnits).then((res) => {
+    withdrawRequest(state.auth.token, w.withdrawAddress, baseUnits).then((res) => {
       if (res.error) {
         w.withdrawPhase = "error";
         w.error = res.error;
       } else {
-        w.withdrawPhase = "success";
-        w.txHash = res.tx_hash || "";
+        w.withdrawPhase = "code-input";
+        w.withdrawCode = "";
+        w.error = "";
       }
       render();
     }).catch(() => {
@@ -153,6 +162,46 @@ function handleConfirm(state: AppState, key: KeyEvent, render: () => void): void
 
   if (key.name === "n" || key.name === "N") {
     w.withdrawPhase = "amount-input";
+  }
+}
+
+function handleWithdrawCode(state: AppState, key: KeyEvent, render: () => void): void {
+  const w = state.wallet;
+
+  if (key.name === "backspace") {
+    w.withdrawCode = w.withdrawCode.slice(0, -1);
+    return;
+  }
+
+  // Accept digits only
+  if (key.raw >= "0" && key.raw <= "9" && w.withdrawCode.length < 6) {
+    w.withdrawCode += key.raw;
+  }
+
+  // Auto-submit on 6th digit
+  if (w.withdrawCode.length === 6) {
+    w.withdrawPhase = "sending";
+    w.error = "";
+    render();
+
+    const parsed = parseFloat(w.withdrawAmount);
+    const baseUnits = Math.floor(parsed * 1_000_000).toString();
+
+    withdrawConfirm(state.auth.token, w.withdrawAddress, baseUnits, w.withdrawCode).then((res) => {
+      if (res.error) {
+        w.withdrawPhase = "code-input";
+        w.withdrawCode = "";
+        w.error = res.error;
+      } else {
+        w.withdrawPhase = "success";
+        w.txHash = res.tx_hash || "";
+      }
+      render();
+    }).catch(() => {
+      w.withdrawPhase = "error";
+      w.error = "Could not reach server";
+      render();
+    });
   }
 }
 
@@ -233,6 +282,7 @@ function resetWithdraw(state: AppState): void {
   state.wallet.withdrawPhase = "address-input";
   state.wallet.withdrawAddress = "";
   state.wallet.withdrawAmount = "";
+  state.wallet.withdrawCode = "";
   state.wallet.txHash = "";
   state.wallet.error = "";
 }

@@ -129,6 +129,10 @@ export async function getWalletDeposits(token: string): Promise<DepositsResponse
   return get("/wallet/deposits", token);
 }
 
-export async function withdraw(token: string, to: string, amount: string): Promise<WithdrawResponse> {
-  return post("/wallet/withdraw", { to, amount }, token);
+export async function withdrawRequest(token: string, to: string, amount: string): Promise<{ ok?: boolean; error?: string }> {
+  return post("/wallet/withdraw/request", { to, amount }, token);
+}
+
+export async function withdrawConfirm(token: string, to: string, amount: string, code: string): Promise<WithdrawResponse> {
+  return post("/wallet/withdraw/confirm", { to, amount, code }, token);
 }

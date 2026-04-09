@@ -158,6 +158,7 @@ function createState(): AppState {
       withdrawPhase: "address-input",
       withdrawAddress: "",
       withdrawAmount: "",
+      withdrawCode: "",
       txHash: "",
       error: "",
     },
@@ -374,6 +375,7 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.wallet.withdrawPhase = "address-input";
           state.wallet.withdrawAddress = "";
           state.wallet.withdrawAmount = "";
+          state.wallet.withdrawCode = "";
           state.wallet.txHash = "";
           state.wallet.error = "";
         }
