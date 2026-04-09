@@ -8,12 +8,17 @@
     "casino": "src/index.ts"
   },
   "scripts": {
-    "start": "bun src/index.ts"
+    "start": "bun src/index.ts",
+    "dev": "bun --env-file=.env.local src/index.ts",
+    "prod": "bun --env-file=.env.production src/index.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "@noble/hashes": "^2.0.1"
   }
 }

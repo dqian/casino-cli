@@ -1,4 +1,4 @@
-import type { AppState, RouletteState, BlackjackState, PaiGowState, GameOptions, GameModule } from "./types";
+import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, GameOptions, GameModule, AuthState } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
@@ -11,6 +11,12 @@ import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer"
 import { handlePaiGowKey } from "./paigow/handler";
 import { renderPaiGowScreen, renderPaiGowHotkeys } from "./paigow/renderer";
 import { createPaiGowState, newRound as newPaiGowRound } from "./paigow/game";
+import { handleCrapsKey } from "./craps/handler";
+import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
+import { createCrapsState } from "./craps/game";
+import { handleLoginKey, verifySession, syncBalanceToServer, serverResetBalance } from "./auth/handler";
+import { loadAuth, clearAuth } from "./auth/store";
+import { handleDepositKey, handleWithdrawKey, loadWallet } from "./wallet/handler";
 
 // --- Game registry ---
 
@@ -29,6 +35,11 @@ export const GAMES: Record<string, GameModule> = {
     handleKey: handlePaiGowKey,
     render: renderPaiGowScreen,
     renderHotkeys: renderPaiGowHotkeys,
+  },
+  craps: {
+    handleKey: handleCrapsKey,
+    render: renderCrapsScreen,
+    renderHotkeys: renderCrapsHotkeys,
   },
 };
 
@@ -94,6 +105,32 @@ function createBlackjackState(options: GameOptions): BlackjackState {
   };
 }
 
+function createAuthState(): AuthState {
+  const saved = loadAuth();
+  if (saved) {
+    return {
+      loggedIn: true,
+      email: saved.email,
+      token: saved.token,
+      userId: saved.userId,
+      phase: "email-input",
+      emailInput: "",
+      codeInput: "",
+      error: "",
+    };
+  }
+  return {
+    loggedIn: false,
+    email: "",
+    token: "",
+    userId: 0,
+    phase: "email-input",
+    emailInput: "",
+    codeInput: "",
+    error: "",
+  };
+}
+
 function createState(): AppState {
   const options = createDefaultOptions();
   return {
@@ -107,8 +144,27 @@ function createState(): AppState {
     roulette: createRouletteState(options),
     blackjack: createBlackjackState(options),
     paigow: createPaiGowState(options),
+    craps: createCrapsState(),
     options,
     optionsCursor: 0,
+    auth: createAuthState(),
+    wallet: {
+      depositPhase: "loading",
+      walletAddress: "",
+      usdcBalance: "0",
+      copied: false,
+      deposits: [],
+      depositsLoaded: false,
+      withdrawals: [],
+      withdrawalsLoaded: false,
+      pollTimer: null,
+      withdrawPhase: "address-input",
+      withdrawAddress: "",
+      withdrawAmount: "",
+      withdrawCode: "",
+      txHash: "",
+      error: "",
+    },
   };
 }
 
@@ -136,6 +192,22 @@ export function startTui(): void {
 
   const render = () => renderScreen(state);
   render();
+
+  // If we have a saved session, verify it in the background
+  if (state.auth.loggedIn) {
+    verifySession(state).then(() => {
+      // Preload USDC balance so real money balance is instantly available on mode switch
+      import("./auth/client").then(({ getWalletBalance }) => {
+        getWalletBalance(state.auth.token).then((res) => {
+          if (res.usdc_balance) {
+            state.wallet.usdcBalance = res.usdc_balance;
+            render();
+          }
+        }).catch(() => {});
+      });
+      render();
+    });
+  }
 
   // Animate menu (shimmer + cursor)
   let lastRenderedFrame = -1;
@@ -173,14 +245,27 @@ export function startTui(): void {
       return;
     }
 
+    const prevBalance = state.balance;
+
     // Game dispatch via registry
     const game = GAMES[state.screen];
     if (game) {
       game.handleKey(state, key, render);
     } else if (state.screen === "menu") {
-      handleMenuKey(state, key, exit);
+      handleMenuKey(state, key, exit, render);
     } else if (state.screen === "options") {
       handleOptionsKey(state, key);
+    } else if (state.screen === "login") {
+      handleLoginKey(state, key, render);
+    } else if (state.screen === "deposit") {
+      handleDepositKey(state, key, render);
+    } else if (state.screen === "withdraw") {
+      handleWithdrawKey(state, key, render);
+    }
+
+    // Sync balance to server whenever it changes
+    if (state.balance !== prevBalance) {
+      syncBalanceToServer(state);
     }
 
     render();
@@ -189,7 +274,7 @@ export function startTui(): void {
 
 // --- Menu ---
 
-function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: () => void): void {
+function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: () => void, render: () => void): void {
   switch (key.name) {
     case "up":
       state.menuCursor = Math.max(0, state.menuCursor - 1);
@@ -201,7 +286,9 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "return": {
       const item = MENU_ITEMS[state.menuCursor]!;
-      if (item.screen) {
+      if (item.screen && state.moneyMode === "real") {
+        state.message = "Real money games coming soon!";
+      } else if (item.screen) {
         state.screen = item.screen;
         if (item.screen === "roulette") {
           state.roulette = createRouletteState(state.options);
@@ -218,6 +305,8 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.paigow.sortMode = state.options.paigow.defaultSort;
           state.paigow.coloredSuits = state.options.paigow.coloredSuits;
           newPaiGowRound(state);
+        } else if (item.screen === "craps") {
+          state.craps = createCrapsState();
         }
         state.message = "";
       } else {
@@ -225,6 +314,24 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       }
       break;
     }
+    case "s":
+      if (state.auth.loggedIn) {
+        clearAuth();
+        state.auth.loggedIn = false;
+        state.auth.email = "";
+        state.auth.token = "";
+        state.auth.userId = 0;
+        state.balance = 1000;
+        state.message = "Logged out";
+      } else {
+        state.screen = "login";
+        state.auth.phase = "email-input";
+        state.auth.emailInput = "";
+        state.auth.codeInput = "";
+        state.auth.error = "";
+        state.message = "";
+      }
+      break;
     case "o":
       state.screen = "options";
       state.optionsCursor = 0;
@@ -233,8 +340,22 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
     case "m":
       if (state.moneyMode === "play") {
         state.moneyMode = "real";
-        state.balance = 0;
+        state.balance = Number(BigInt(state.wallet.usdcBalance || "0")) / 1_000_000;
         state.message = "Switched to Real Money mode";
+        // Refresh in background
+        if (state.auth.loggedIn) {
+          import("./auth/client").then(({ getWalletBalance }) => {
+            getWalletBalance(state.auth.token).then((res) => {
+              if (res.usdc_balance) {
+                state.wallet.usdcBalance = res.usdc_balance;
+                if (state.moneyMode === "real") {
+                  state.balance = Number(BigInt(res.usdc_balance)) / 1_000_000;
+                }
+                render();
+              }
+            }).catch(() => {});
+          });
+        }
       } else {
         state.moneyMode = "play";
         state.balance = 1000;
@@ -243,16 +364,65 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "r":
       if (state.moneyMode === "play") {
-        state.balance = 1000;
-        state.message = "Balance reset to $1,000";
+        if (state.auth.loggedIn) {
+          serverResetBalance(state, render);
+        } else {
+          state.balance = 1000;
+          state.message = "Balance reset to $1,000";
+        }
       }
       break;
     case "d":
       if (state.moneyMode === "real") {
-        state.message = "Deposits coming soon!";
+        if (!state.auth.loggedIn) {
+          state.message = "Sign in to deposit";
+        } else {
+          state.screen = "deposit";
+          loadWallet(state, render);
+        }
+      }
+      break;
+    case "w":
+      if (state.moneyMode === "real") {
+        if (!state.auth.loggedIn) {
+          state.message = "Sign in to withdraw";
+        } else {
+          state.screen = "withdraw";
+          state.wallet.withdrawPhase = "address-input";
+          state.wallet.withdrawAddress = "";
+          state.wallet.withdrawAmount = "";
+          state.wallet.withdrawCode = "";
+          state.wallet.txHash = "";
+          state.wallet.error = "";
+          state.wallet.withdrawalsLoaded = false;
+          state.wallet.withdrawals = [];
+          // Refresh USDC balance and withdrawal history
+          import("./auth/client").then(({ getWalletBalance, getWalletWithdrawals }) => {
+            getWalletBalance(state.auth.token).then((res) => {
+              if (res.usdc_balance) {
+                state.wallet.usdcBalance = res.usdc_balance;
+                render();
+              }
+            }).catch(() => {});
+
+            getWalletWithdrawals(state.auth.token).then((res) => {
+              state.wallet.withdrawals = (res.transfers || []).map((t) => ({
+                to: t.to,
+                amount: t.amount,
+                tx_hash: t.tx_hash,
+              }));
+              state.wallet.withdrawalsLoaded = true;
+              render();
+            }).catch(() => {
+              state.wallet.withdrawalsLoaded = true;
+              render();
+            });
+          });
+        }
       }
       break;
     case "q":
+      syncBalanceToServer(state);
       exit();
       break;
   }

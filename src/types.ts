@@ -1,4 +1,4 @@
-export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "options";
+export type Screen = "menu" | "roulette" | "blackjack" | "paigow" | "craps" | "options" | "login" | "deposit" | "withdraw";
 
 export type MenuItem = {
   name: string;
@@ -22,6 +22,54 @@ export interface GameOptions {
   };
 }
 
+export type LoginPhase = "email-input" | "sending" | "code-input" | "verifying" | "error";
+
+export interface AuthState {
+  loggedIn: boolean;
+  email: string;
+  token: string;
+  userId: number;
+  phase: LoginPhase;
+  emailInput: string;
+  codeInput: string;
+  error: string;
+}
+
+export type WalletPhase = "loading" | "ready" | "error";
+export type WithdrawPhase = "address-input" | "amount-input" | "confirm" | "code-sending" | "code-input" | "sending" | "success" | "error";
+
+export interface DepositEntry {
+  from: string;
+  amount: string; // base units
+  tx_hash: string;
+}
+
+export interface WithdrawalEntry {
+  to: string;
+  amount: string; // base units
+  tx_hash: string;
+}
+
+export interface WalletState {
+  // Deposit
+  depositPhase: WalletPhase;
+  walletAddress: string;
+  usdcBalance: string; // raw base units
+  copied: boolean;
+  deposits: DepositEntry[];
+  depositsLoaded: boolean;
+  withdrawals: WithdrawalEntry[];
+  withdrawalsLoaded: boolean;
+  pollTimer: ReturnType<typeof setInterval> | null;
+  // Withdraw
+  withdrawPhase: WithdrawPhase;
+  withdrawAddress: string;
+  withdrawAmount: string;
+  withdrawCode: string;
+  txHash: string;
+  error: string;
+}
+
 export interface AppState {
   screen: Screen;
   balance: number;
@@ -33,8 +81,11 @@ export interface AppState {
   roulette: RouletteState;
   blackjack: BlackjackState;
   paigow: PaiGowState;
+  craps: CrapsState;
   options: GameOptions;
   optionsCursor: number;
+  auth: AuthState;
+  wallet: WalletState;
 }
 
 export type RoulettePhase = "betting" | "spinning" | "result";
@@ -177,6 +228,60 @@ export interface PaiGowState {
   coloredSuits: boolean;
   spreadFrame: number;          // 0 = no anim, >0 = spreading cards
   sortFrame: number;            // 0 = no anim, >0 = sort animation
+}
+
+// Craps types
+export type CrapsPhase = "betting" | "rolling" | "result";
+
+export type CrapsBetKind =
+  | "pass"
+  | "dontPass"
+  | "come"
+  | "dontCome"
+  | "field"
+  | "place4"
+  | "place5"
+  | "place6"
+  | "place8"
+  | "place9"
+  | "place10"
+  | "passOdds"
+  | "dontPassOdds"
+  | "comeOdds"
+  | "dontComeOdds"
+  | "hard4"
+  | "hard6"
+  | "hard8"
+  | "hard10"
+  | "any7"
+  | "anyCraps"
+  | "yo"
+  | "horn"
+  | "ce"
+  | "aces"
+  | "aceDeuce"
+  | "twelve";
+
+export interface CrapsBet {
+  kind: CrapsBetKind;
+  amount: number;
+  point?: number; // for come/don't come bets and their odds that have established a point
+}
+
+export interface CrapsState {
+  phase: CrapsPhase;
+  point: number | null;          // null = come-out roll, number = point phase
+  bets: CrapsBet[];
+  betAmount: number;             // current chip size
+  cursorPos: number;             // index into bet positions array
+  dice: [number, number];        // current dice values
+  rollHistory: number[];         // last N roll sums
+  rollFrame: number;             // animation frame counter
+  rollTarget: [number, number];  // final dice values
+  winAmount: number;             // amount won on last roll
+  lossAmount: number;            // amount lost on last roll
+  message: string;               // roll result message
+  skipAnim: boolean;             // user pressed Enter to skip animation
 }
 
 // Game module interface — each game implements this for TUI dispatch

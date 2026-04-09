@@ -2,22 +2,40 @@ import type { AppState, MenuItem, GameModule } from "./types";
 import * as t from "./theme";
 import { GAMES } from "./tui";
 import { sliceAnsi } from "./shared/render";
+import { renderLoginScreen } from "./auth/renderer";
+import { renderDepositScreen, renderWithdrawScreen } from "./wallet/renderer";
 
 export const MENU_ITEMS: MenuItem[] = [
   { name: "Roulette", screen: "roulette", label: "European (Single Zero)" },
   { name: "Blackjack", screen: "blackjack", label: "2-Deck, 3:2" },
   { name: "Pai Gow Poker", screen: "paigow", label: "53-Card, House Way" },
+  { name: "Craps", screen: "craps", label: "Standard Casino" },
   { name: "Baccarat", screen: null, label: "Coming Soon" },
-  { name: "Craps", screen: null, label: "Coming Soon" },
 ];
 
 export function renderScreen(state: AppState): void {
-  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow") {
+  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow" || state.screen === "craps") {
     renderGameScreen(state);
     return;
   }
   if (state.screen === "options") {
     renderOptionsScreen(state);
+    return;
+  }
+  if (state.screen === "login") {
+    const { rows: height } = process.stdout;
+    const lines = renderLoginScreen(state);
+    writeLines(lines, height);
+    return;
+  }
+  if (state.screen === "deposit") {
+    const { rows: height } = process.stdout;
+    writeLines(renderDepositScreen(state), height);
+    return;
+  }
+  if (state.screen === "withdraw") {
+    const { rows: height } = process.stdout;
+    writeLines(renderWithdrawScreen(state), height);
     return;
   }
   renderMenuScreen(state);
@@ -76,12 +94,21 @@ function renderMenuScreen(state: AppState): void {
   }
   lines.push("");
 
+  // Auth status
+  if (state.auth.loggedIn) {
+    lines.push(centerAnsiText(`${t.green}${t.bold}●${t.reset} ${t.gray}Signed in as ${t.white}${state.auth.email}${t.reset}`, width));
+  } else {
+    lines.push(centerAnsiText(`${t.gray}${t.dim}Sign in to save progress${t.reset}`, width));
+  }
+  lines.push("");
+
   // Mode indicator + Balance
   const modeLabel = state.moneyMode === "play"
     ? `${t.cyan}${t.bold}PLAY MONEY${t.reset}`
     : `${t.yellow}${t.bold}REAL MONEY${t.reset}`;
   lines.push(centerAnsiText(modeLabel, width));
-  const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${state.balance.toLocaleString()}${t.reset}`;
+  const balanceStr = state.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${balanceStr}${t.reset}`;
   lines.push(centerAnsiText(balanceLine, width));
   if (state.moneyMode === "real" && state.balance === 0) {
     lines.push(centerAnsiText(`${t.gray}Deposit to start playing${t.reset}`, width));
@@ -98,10 +125,13 @@ function renderMenuScreen(state: AppState): void {
   for (let i = 0; i < MENU_ITEMS.length; i++) {
     const item = MENU_ITEMS[i]!;
     const selected = i === state.menuCursor;
-    const available = item.screen !== null;
-    const label = item.screen === "blackjack"
-      ? `${state.options.blackjack.numDecks}-Deck, 3:2`
-      : item.label;
+    const disabledByRealMode = state.moneyMode === "real" && item.screen !== null;
+    const available = item.screen !== null && !disabledByRealMode;
+    const label = disabledByRealMode
+      ? "Coming Soon"
+      : item.screen === "blackjack"
+        ? `${state.options.blackjack.numDecks}-Deck, 3:2`
+        : item.label;
 
     let line: string;
     if (selected && available) {
@@ -122,22 +152,41 @@ function renderMenuScreen(state: AppState): void {
   lines.push(centerAnsiText(`${t.gray}${"─".repeat(40)}${t.reset}`, width));
   lines.push("");
 
-  // Hotkey grid as bottom border to menu options
-  const menuKeys: { key: string; label: string }[] = [
+  // Hotkey grid — two columns
+  const leftCol: { key: string; label: string }[] = [
     { key: "↑↓", label: "Select" },
     { key: "Enter", label: "Play" },
     { key: "o", label: "Options" },
+    { key: "s", label: state.auth.loggedIn ? "Sign out" : "Sign in" },
+    { key: "q", label: "Quit" },
+  ];
+  const rightCol: { key: string; label: string }[] = [
     { key: "m", label: "Toggle mode" },
     ...(state.moneyMode === "play"
       ? [{ key: "r", label: "Reset balance" }]
-      : [{ key: "d", label: "Deposit" }]),
-    { key: "q", label: "Quit" },
+      : []),
+    ...(state.moneyMode === "real"
+      ? [{ key: "d", label: "Deposit" }, { key: "w", label: "Withdraw" }]
+      : []),
   ];
-  const maxKey = Math.max(...menuKeys.map(h => h.key.length));
-  const maxLabel = "Reset balance".length; // fixed width to prevent layout shift
-  for (const h of menuKeys) {
-    const line = `${t.white}${t.bold}${h.key.padStart(maxKey)}${t.reset}  ${t.gray}${h.label.padEnd(maxLabel)}${t.reset}`;
-    lines.push(centerAnsiText(line, width));
+  const maxKeyL = Math.max(...leftCol.map(h => h.key.length));
+  const maxLabelL = Math.max(...leftCol.map(h => h.label.length));
+  // Fixed widths so centering doesn't shift between modes
+  const maxKeyR = 1; // all right-col keys are single char (m, r, d, w)
+  const maxLabelR = "Reset balance".length;
+  const gap = 4;
+  const totalVisWidth = maxKeyL + 2 + maxLabelL + gap + maxKeyR + 2 + maxLabelR;
+  const rows = Math.max(leftCol.length, rightCol.length);
+  for (let i = 0; i < rows; i++) {
+    const l = leftCol[i];
+    const r = rightCol[i];
+    const lStr = l
+      ? `${t.white}${t.bold}${l.key.padStart(maxKeyL)}${t.reset}  ${t.gray}${l.label.padEnd(maxLabelL)}${t.reset}`
+      : " ".repeat(maxKeyL + 2 + maxLabelL);
+    const rStr = r
+      ? `${" ".repeat(gap)}${t.white}${t.bold}${r.key.padStart(maxKeyR)}${t.reset}  ${t.gray}${r.label.padEnd(maxLabelR)}${t.reset}`
+      : " ".repeat(gap + maxKeyR + 2 + maxLabelR);
+    lines.push(centerAnsiText(lStr + rStr, width));
   }
 
   if (state.message) {
