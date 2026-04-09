@@ -60,9 +60,14 @@ function handleEmailInput(state: AppState, key: KeyEvent, render: () => void): v
     return;
   }
 
-  // Accept printable characters for email, cap at RFC 5321 max
-  if (key.raw.length === 1 && !key.ctrl && key.raw.charCodeAt(0) >= 33 && auth.emailInput.length < MAX_EMAIL_LENGTH) {
-    auth.emailInput += key.raw;
+  // Accept printable characters for email (handles paste too), cap at RFC 5321 max
+  if (!key.ctrl && key.raw.length >= 1) {
+    for (const ch of key.raw) {
+      if (auth.emailInput.length >= MAX_EMAIL_LENGTH) break;
+      if (ch.charCodeAt(0) >= 33) {
+        auth.emailInput += ch;
+      }
+    }
   }
 }
 

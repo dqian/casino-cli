@@ -97,10 +97,13 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
     return;
   }
 
-  if (key.raw.length === 1 && !key.ctrl && w.withdrawAddress.length < MAX_ADDRESS_LENGTH) {
-    const ch = key.raw;
-    if (/[0-9a-fA-Fx]/.test(ch)) {
-      w.withdrawAddress += ch;
+  // Handle paste (multi-char) or single keypress
+  if (!key.ctrl && key.raw.length >= 1) {
+    for (const ch of key.raw) {
+      if (w.withdrawAddress.length >= MAX_ADDRESS_LENGTH) break;
+      if (/[0-9a-fA-Fx]/.test(ch)) {
+        w.withdrawAddress += ch;
+      }
     }
   }
 }
@@ -124,10 +127,12 @@ function handleAmountInput(state: AppState, key: KeyEvent, render: () => void): 
     return;
   }
 
-  if (key.raw.length === 1 && !key.ctrl && w.withdrawAmount.length < 20) {
-    const ch = key.raw;
-    if (/[0-9]/.test(ch) || (ch === "." && !w.withdrawAmount.includes("."))) {
-      w.withdrawAmount += ch;
+  if (!key.ctrl && key.raw.length >= 1) {
+    for (const ch of key.raw) {
+      if (w.withdrawAmount.length >= 20) break;
+      if (/[0-9]/.test(ch) || (ch === "." && !w.withdrawAmount.includes("."))) {
+        w.withdrawAmount += ch;
+      }
     }
   }
 }
