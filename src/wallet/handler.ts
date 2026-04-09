@@ -9,6 +9,7 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
   if (state.wallet.depositPhase === "loading") return;
 
   if (key.name === "escape" || key.name === "q") {
+    stopPolling(state);
     state.screen = "menu";
     return;
   }
@@ -147,10 +148,20 @@ function handleConfirm(state: AppState, key: KeyEvent, render: () => void): void
   }
 }
 
-/** Full wallet load — address, balance, and recent deposits. */
+/** Full wallet load — address, balance, and recent deposits. Starts auto-refresh. */
 export function loadWallet(state: AppState, render: () => void): void {
   state.wallet.depositPhase = "loading";
   render();
+
+  // Start 10s polling
+  stopPolling(state);
+  state.wallet.pollTimer = setInterval(() => {
+    if (state.screen === "deposit") {
+      refreshBalance(state, render);
+    } else {
+      stopPolling(state);
+    }
+  }, 10_000);
 
   getWallet(state.auth.token).then((res) => {
     if (res.error) {
@@ -199,6 +210,13 @@ function refreshBalance(state: AppState, render: () => void): void {
     }));
     render();
   }).catch(() => {});
+}
+
+function stopPolling(state: AppState): void {
+  if (state.wallet.pollTimer) {
+    clearInterval(state.wallet.pollTimer);
+    state.wallet.pollTimer = null;
+  }
 }
 
 function resetWithdraw(state: AppState): void {

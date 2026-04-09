@@ -154,6 +154,7 @@ function createState(): AppState {
       usdcBalance: "0",
       copied: false,
       deposits: [],
+      pollTimer: null,
       withdrawPhase: "address-input",
       withdrawAddress: "",
       withdrawAmount: "",
