@@ -154,6 +154,7 @@ function createState(): AppState {
       usdcBalance: "0",
       copied: false,
       deposits: [],
+      withdrawals: [],
       pollTimer: null,
       withdrawPhase: "address-input",
       withdrawAddress: "",
@@ -391,13 +392,22 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           state.wallet.withdrawCode = "";
           state.wallet.txHash = "";
           state.wallet.error = "";
-          // Refresh USDC balance for MAX button
-          import("./auth/client").then(({ getWalletBalance }) => {
+          // Refresh USDC balance and withdrawal history
+          import("./auth/client").then(({ getWalletBalance, getWalletWithdrawals }) => {
             getWalletBalance(state.auth.token).then((res) => {
               if (res.usdc_balance) {
                 state.wallet.usdcBalance = res.usdc_balance;
                 render();
               }
+            }).catch(() => {});
+
+            getWalletWithdrawals(state.auth.token).then((res) => {
+              state.wallet.withdrawals = (res.transfers || []).map((t) => ({
+                to: t.to,
+                amount: t.amount,
+                tx_hash: t.tx_hash,
+              }));
+              render();
             }).catch(() => {});
           });
         }

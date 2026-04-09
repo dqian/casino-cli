@@ -126,6 +126,25 @@ export function renderWithdrawScreen(state: AppState): string[] {
     } else {
       lines.push(center(`${t.green}Press Enter to continue${t.reset}`, width));
     }
+
+    // Withdrawal history — only shown when address is empty
+    if (w.withdrawAddress === "" && w.withdrawals.length > 0) {
+      lines.push("");
+      lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
+      lines.push(center(`${t.white}${t.bold}Recent withdrawals (24h)${t.reset}`, width));
+      lines.push(center(`${t.gray}${t.dim}Press 1-5 to reuse an address${t.reset}`, width));
+      lines.push("");
+
+      const shown = w.withdrawals.slice(0, 5);
+      for (let i = 0; i < shown.length; i++) {
+        const wd = shown[i]!;
+        const amt = formatUsdc(wd.amount);
+        const to = shortAddr(wd.to);
+        const tx = shortTx(wd.tx_hash);
+        const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
+        lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${t.gray}tx ${t.dim}${tx}${t.reset}`, width));
+      }
+    }
   } else if (w.withdrawPhase === "amount-input") {
     lines.push(center(`${t.white}To: ${t.cyan}${w.withdrawAddress}${t.reset}`, width));
     lines.push("");

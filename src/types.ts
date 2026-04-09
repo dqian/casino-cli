@@ -44,6 +44,12 @@ export interface DepositEntry {
   tx_hash: string;
 }
 
+export interface WithdrawalEntry {
+  to: string;
+  amount: string; // base units
+  tx_hash: string;
+}
+
 export interface WalletState {
   // Deposit
   depositPhase: WalletPhase;
@@ -51,6 +57,7 @@ export interface WalletState {
   usdcBalance: string; // raw base units
   copied: boolean;
   deposits: DepositEntry[];
+  withdrawals: WithdrawalEntry[];
   pollTimer: ReturnType<typeof setInterval> | null;
   // Withdraw
   withdrawPhase: WithdrawPhase;

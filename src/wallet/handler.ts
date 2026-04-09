@@ -104,6 +104,17 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
     return;
   }
 
+  // Number keys 1-5 select from withdrawal history (only when address is empty)
+  if (w.withdrawAddress === "" && /^[1-5]$/.test(key.name)) {
+    const idx = parseInt(key.name, 10) - 1;
+    const historyEntry = w.withdrawals.slice(0, 5)[idx];
+    if (historyEntry) {
+      w.withdrawAddress = historyEntry.to;
+      w.error = "";
+      return;
+    }
+  }
+
   // Handle paste (multi-char) or single keypress
   if (!key.ctrl && key.raw.length >= 1) {
     for (const ch of key.raw) {

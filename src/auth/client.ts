@@ -107,6 +107,7 @@ export interface BalanceOnlyResponse {
 
 export interface DepositTransfer {
   from: string;
+  to?: string;
   amount: string;
   tx_hash: string;
   block_number: number;
@@ -114,6 +115,19 @@ export interface DepositTransfer {
 
 export interface DepositsResponse {
   transfers?: DepositTransfer[];
+  error?: string;
+}
+
+export interface WithdrawalTransfer {
+  from: string;
+  to: string;
+  amount: string;
+  tx_hash: string;
+  block_number: number;
+}
+
+export interface WithdrawalsResponse {
+  transfers?: WithdrawalTransfer[];
   error?: string;
 }
 
@@ -127,6 +141,10 @@ export async function getWalletBalance(token: string): Promise<BalanceOnlyRespon
 
 export async function getWalletDeposits(token: string): Promise<DepositsResponse> {
   return get("/wallet/deposits", token);
+}
+
+export async function getWalletWithdrawals(token: string): Promise<WithdrawalsResponse> {
+  return get("/wallet/withdrawals", token);
 }
 
 export async function withdrawRequest(token: string, to: string, amount: string): Promise<{ ok?: boolean; error?: string }> {
