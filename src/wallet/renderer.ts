@@ -62,15 +62,18 @@ export function renderDepositScreen(state: AppState): string[] {
     // Recent deposits
     if (w.deposits.length > 0) {
       lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
-      lines.push(center(`${t.white}${t.bold}Recent deposits (24h)${t.reset}`, width));
+      lines.push(center(`${t.white}${t.bold}Recent deposits${t.reset}`, width));
+      lines.push(center(`${t.gray}${t.dim}Press 1-5 to view tx on basescan${t.reset}`, width));
       lines.push("");
 
       const shown = w.deposits.slice(-5).reverse(); // last 5, newest first
-      for (const dep of shown) {
+      for (let i = 0; i < shown.length; i++) {
+        const dep = shown[i]!;
         const amt = formatUsdc(dep.amount);
         const from = shortAddr(dep.from);
         const tx = shortTx(dep.tx_hash);
-        lines.push(center(`${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${t.gray}tx ${t.dim}${tx}${t.reset}`, width));
+        const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
+        lines.push(center(`${num}  ${t.green}+$${amt}${t.reset}  ${t.gray}from ${t.white}${from}${t.reset}  ${t.cyan}${t.underline}${tx}${t.reset}`, width));
       }
     } else {
       lines.push(center(`${t.gray}${t.dim}No recent deposits${t.reset}`, width));
@@ -131,18 +134,20 @@ export function renderWithdrawScreen(state: AppState): string[] {
     if (w.withdrawAddress === "" && w.withdrawals.length > 0) {
       lines.push("");
       lines.push(center(`${t.gray}${"─".repeat(44)}${t.reset}`, width));
-      lines.push(center(`${t.white}${t.bold}Recent withdrawals (24h)${t.reset}`, width));
-      lines.push(center(`${t.gray}${t.dim}Press 1-5 to reuse an address${t.reset}`, width));
+      lines.push(center(`${t.white}${t.bold}Recent withdrawals${t.reset}`, width));
+      lines.push(center(`${t.gray}${t.dim}1-5 reuse address  ·  !@#$% view tx on basescan${t.reset}`, width));
       lines.push("");
 
       const shown = w.withdrawals.slice(0, 5);
+      const shiftDigits = ["!", "@", "#", "$", "%"];
       for (let i = 0; i < shown.length; i++) {
         const wd = shown[i]!;
         const amt = formatUsdc(wd.amount);
         const to = shortAddr(wd.to);
         const tx = shortTx(wd.tx_hash);
         const num = `${t.cyan}${t.bold}[${i + 1}]${t.reset}`;
-        lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${t.gray}tx ${t.dim}${tx}${t.reset}`, width));
+        const shiftKey = `${t.magenta}${t.bold}[${shiftDigits[i]}]${t.reset}`;
+        lines.push(center(`${num}  ${t.red}-$${amt}${t.reset}  ${t.gray}to ${t.white}${to}${t.reset}  ${shiftKey} ${t.cyan}${t.underline}${tx}${t.reset}`, width));
       }
     }
   } else if (w.withdrawPhase === "amount-input") {

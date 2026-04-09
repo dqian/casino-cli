@@ -35,6 +35,14 @@ export function handleDepositKey(state: AppState, key: KeyEvent, render: () => v
     state.wallet.copied = true;
     render();
     setTimeout(() => { state.wallet.copied = false; render(); }, 2000);
+    return;
+  }
+
+  // 1-5 opens tx on basescan
+  if (/^[1-5]$/.test(key.name) && state.wallet.depositPhase === "ready") {
+    const idx = parseInt(key.name, 10) - 1;
+    const entry = state.wallet.deposits.slice(0, 5)[idx];
+    if (entry) openTxOnBasescan(entry.tx_hash);
   }
 }
 
@@ -111,6 +119,17 @@ function handleAddressInput(state: AppState, key: KeyEvent, _render: () => void)
     if (historyEntry) {
       w.withdrawAddress = historyEntry.to;
       w.error = "";
+      return;
+    }
+  }
+
+  // Shift+1-5 (!@#$%) opens tx on basescan
+  const shiftDigitMap: Record<string, number> = { "!": 0, "@": 1, "#": 2, "$": 3, "%": 4 };
+  if (w.withdrawAddress === "" && key.name in shiftDigitMap) {
+    const idx = shiftDigitMap[key.name]!;
+    const historyEntry = w.withdrawals.slice(0, 5)[idx];
+    if (historyEntry) {
+      openTxOnBasescan(historyEntry.tx_hash);
       return;
     }
   }
@@ -331,4 +350,15 @@ function copyToClipboard(text: string): void {
     : spawn("xclip", ["-selection", "clipboard"]);
   proc.stdin.write(text);
   proc.stdin.end();
+}
+
+function openUrl(url: string): void {
+  const cmd = process.platform === "darwin" ? "open"
+    : process.platform === "win32" ? "start"
+    : "xdg-open";
+  spawn(cmd, [url], { detached: true, stdio: "ignore" }).unref();
+}
+
+function openTxOnBasescan(txHash: string): void {
+  openUrl(`https://basescan.org/tx/${txHash}`);
 }
