@@ -107,13 +107,20 @@ function renderMenuScreen(state: AppState): void {
     ? `${t.cyan}${t.bold}PLAY MONEY${t.reset}`
     : `${t.yellow}${t.bold}REAL MONEY${t.reset}`;
   lines.push(centerAnsiText(modeLabel, width));
-  const balanceStr = state.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${balanceStr}${t.reset}`;
-  lines.push(centerAnsiText(balanceLine, width));
-  if (state.moneyMode === "real" && state.balance === 0) {
-    lines.push(centerAnsiText(`${t.gray}Deposit to start playing${t.reset}`, width));
-  } else {
+  if (!state.balanceReady) {
+    // Awaiting authoritative balance from the server — don't flash the stale
+    // local default ($1000) before the real number arrives.
+    lines.push(centerAnsiText(`${t.white}${t.bold}Balance: ${t.gray}…${t.reset}`, width));
     lines.push("");
+  } else {
+    const balanceStr = state.balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const balanceLine = `${t.white}${t.bold}Balance: ${t.green}$${balanceStr}${t.reset}`;
+    lines.push(centerAnsiText(balanceLine, width));
+    if (state.moneyMode === "real" && state.balance === 0) {
+      lines.push(centerAnsiText(`${t.gray}Deposit to start playing${t.reset}`, width));
+    } else {
+      lines.push("");
+    }
   }
   lines.push(centerAnsiText(`${t.gray}${"─".repeat(40)}${t.reset}`, width));
   lines.push("");
