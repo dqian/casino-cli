@@ -76,6 +76,8 @@ function createRouletteState(options: GameOptions): RouletteState {
     ballVY: 0,
     ballVX: 0,
     ballBouncing: false,
+    serverWinnings: null,
+    serverBalanceAfter: null,
   };
 }
 
@@ -263,8 +265,11 @@ export function startTui(): void {
       handleWithdrawKey(state, key, render);
     }
 
-    // Sync balance to server whenever it changes
-    if (state.balance !== prevBalance) {
+    // Sync balance to server whenever it changes — except for screens where the
+    // server is already authoritative (roulette settles on the backend, so any
+    // local balance change there is either an optimistic bet placement or a
+    // server-applied result we'd just be echoing back).
+    if (state.balance !== prevBalance && state.screen !== "roulette") {
       syncBalanceToServer(state);
     }
 

@@ -136,6 +136,11 @@ export interface RouletteState {
   ballVY: number;              // vertical velocity
   ballVX: number;              // horizontal velocity
   ballBouncing: boolean;       // ball still in motion
+  // Server-driven round result. Set by spin() when the server is authoritative;
+  // consumed by finishSpin() to override local payout/balance computation.
+  // null when the round is local (offline / unauthed / non-play mode).
+  serverWinnings: number | null;
+  serverBalanceAfter: number | null;
 }
 
 // Blackjack types

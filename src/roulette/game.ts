@@ -1,5 +1,6 @@
 import type { AppState, BetType } from "../types";
 import { virtualToGridPos, gridPosToBet, sameBetType, isWinner, payout, WHEEL_ORDER, tablePos } from "./board";
+import { playRouletteRound, type RouletteBetWire } from "../auth/client";
 
 export function placeBet(state: AppState): void {
   const rs = state.roulette;
@@ -95,7 +96,72 @@ export function spin(state: AppState, render: () => void): void {
   state.roulette.phase = "spinning";
   state.message = "";
 
+  // Server-authoritative path: authed + play money. Server runs RNG and settlement.
+  // Local path: offline / unauthed / non-play modes. Falls back to local RNG.
+  // (Real money roulette is currently gated at the menu and at the server, so this
+  // branch is play-only today; the same code path will handle real money once enabled.)
+  const useServer = state.auth.loggedIn && !!state.auth.token && state.moneyMode === "play";
+
+  if (useServer) {
+    spinServerDriven(state, render);
+  } else {
+    spinLocal(state, render);
+  }
+}
+
+/** Local spin path — Math.random RNG, local settlement. Used when offline or unauthed. */
+function spinLocal(state: AppState, render: () => void): void {
   const target = Math.floor(Math.random() * 37);
+  startSpinAnimation(state, render, target);
+}
+
+/**
+ * Server-driven spin: send the round to the backend, await the outcome,
+ * then animate toward the server's winning number. Server is the source of
+ * truth for both the result and the post-round balance.
+ */
+function spinServerDriven(state: AppState, render: () => void): void {
+  // Render the spinning state immediately so the user gets feedback while we wait.
+  render();
+
+  // Convert local bets ($ as number) to wire format (cents as string).
+  const wireBets: RouletteBetWire[] = state.roulette.bets.map((b) => ({
+    bet: b.type,
+    amount: String(Math.round(b.amount * 100)),
+  }));
+
+  playRouletteRound(state.auth.token, "play", wireBets).then((res) => {
+    if (state.roulette.phase !== "spinning") return; // user navigated away
+
+    if (res.error || res.winningNumber === undefined || res.balanceAfter === undefined) {
+      // Refund local stakes (the local debits in placeBet are still in effect)
+      const totalStake = state.roulette.bets.reduce((s, b) => s + b.amount, 0);
+      state.balance += totalStake;
+      state.roulette.bets = [];
+      state.roulette.phase = "betting";
+      state.message = res.error || "Server error";
+      render();
+      return;
+    }
+
+    // Stash server result; finishSpin() will use these instead of computing locally.
+    state.roulette.serverWinnings = Number(BigInt(res.totalPayout || "0")) / 100;
+    state.roulette.serverBalanceAfter = Number(BigInt(res.balanceAfter)) / 100;
+
+    startSpinAnimation(state, render, res.winningNumber);
+  }).catch(() => {
+    if (state.roulette.phase !== "spinning") return;
+    const totalStake = state.roulette.bets.reduce((s, b) => s + b.amount, 0);
+    state.balance += totalStake;
+    state.roulette.bets = [];
+    state.roulette.phase = "betting";
+    state.message = "Could not reach server";
+    render();
+  });
+}
+
+/** Set up spin animation parameters and kick off the loop. Target is the winning number (0-36). */
+function startSpinAnimation(state: AppState, render: () => void, target: number): void {
   state.roulette.spinTarget = target;
 
   const targetIdx = WHEEL_ORDER.indexOf(target);
@@ -282,15 +348,27 @@ function ballLandingNumber(rs: AppState["roulette"]): number {
 function finishSpin(state: AppState, render: () => void, finalNum: number): void {
   state.roulette.result = finalNum;
 
-  let winnings = 0;
-  for (const bet of state.roulette.bets) {
-    if (isWinner(finalNum, bet.type)) {
-      winnings += bet.amount * (payout(bet.type) + 1);
+  let winnings: number;
+  if (state.roulette.serverBalanceAfter !== null) {
+    // Server-driven path: trust the server's settlement.
+    // The local debits from placeBet remain in state.balance, and we replace it
+    // wholesale with the server's authoritative post-round balance.
+    winnings = state.roulette.serverWinnings ?? 0;
+    state.balance = state.roulette.serverBalanceAfter;
+    state.roulette.serverWinnings = null;
+    state.roulette.serverBalanceAfter = null;
+  } else {
+    // Local path: compute winnings from local rules and credit the balance.
+    winnings = 0;
+    for (const bet of state.roulette.bets) {
+      if (isWinner(finalNum, bet.type)) {
+        winnings += bet.amount * (payout(bet.type) + 1);
+      }
     }
+    state.balance += winnings;
   }
 
   state.roulette.winAmount = winnings;
-  state.balance += winnings;
   state.roulette.spinHistory.push(finalNum);
   if (state.roulette.spinHistory.length > 15) state.roulette.spinHistory.shift();
   state.roulette.phase = "result";
@@ -324,5 +402,7 @@ export function newRound(state: AppState): void {
   state.roulette.ballVY = 0;
   state.roulette.ballVX = 0;
   state.roulette.ballBouncing = false;
+  state.roulette.serverWinnings = null;
+  state.roulette.serverBalanceAfter = null;
   state.message = "";
 }
