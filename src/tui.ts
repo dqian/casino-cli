@@ -76,6 +76,8 @@ function createRouletteState(options: GameOptions): RouletteState {
     ballVY: 0,
     ballVX: 0,
     ballBouncing: false,
+    serverWinnings: null,
+    serverBalanceAfter: null,
   };
 }
 
@@ -133,9 +135,16 @@ function createAuthState(): AuthState {
 
 function createState(): AppState {
   const options = createDefaultOptions();
+  const auth = createAuthState();
   return {
     screen: "menu",
     balance: 1000,
+    playBalance: 1000,
+    // If we have a saved session, mark balance as not-yet-ready — startTui
+    // will verify the session in the background and flip this true once the
+    // authoritative figure is in hand. Unauthed users have no server balance
+    // to wait for, so we flag as ready immediately.
+    balanceReady: !auth.loggedIn,
     moneyMode: "play",
     menuCursor: 0,
     menuAnimFrame: 0,
@@ -147,7 +156,7 @@ function createState(): AppState {
     craps: createCrapsState(),
     options,
     optionsCursor: 0,
-    auth: createAuthState(),
+    auth,
     wallet: {
       depositPhase: "loading",
       walletAddress: "",
@@ -190,7 +199,17 @@ export function startTui(): void {
   process.stdin.setEncoding("utf-8");
   process.stdout.write(t.altScreenOn + t.hideCursor);
 
-  const render = () => renderScreen(state);
+  // Single render entry point. Also mirrors state.balance into state.playBalance
+  // while we're in play mode, so toggling modes later can restore the last-known
+  // play balance instead of resetting it. Every balance mutation in the app is
+  // followed by a render() call (sync or async), so this hook keeps the cache
+  // consistent without touching each call site individually.
+  const render = () => {
+    if (state.moneyMode === "play") {
+      state.playBalance = state.balance;
+    }
+    renderScreen(state);
+  };
   render();
 
   // If we have a saved session, verify it in the background
@@ -263,8 +282,11 @@ export function startTui(): void {
       handleWithdrawKey(state, key, render);
     }
 
-    // Sync balance to server whenever it changes
-    if (state.balance !== prevBalance) {
+    // Sync balance to server whenever it changes — except for screens where the
+    // server is already authoritative (roulette settles on the backend, so any
+    // local balance change there is either an optimistic bet placement or a
+    // server-applied result we'd just be echoing back).
+    if (state.balance !== prevBalance && state.screen !== "roulette") {
       syncBalanceToServer(state);
     }
 
@@ -286,6 +308,15 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       break;
     case "return": {
       const item = MENU_ITEMS[state.menuCursor]!;
+      if (item.screen && !state.balanceReady) {
+        // Refuse to enter a game until we have the authoritative server
+        // balance — otherwise the user could place bets against the stale
+        // local default ($1000), and when verifySession later resolves
+        // it would wholesale overwrite state.balance and silently erase
+        // those wagers.
+        state.message = "Loading balance…";
+        break;
+      }
       if (item.screen && state.moneyMode === "real") {
         state.message = "Real money games coming soon!";
       } else if (item.screen) {
@@ -322,6 +353,7 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
         state.auth.token = "";
         state.auth.userId = 0;
         state.balance = 1000;
+        state.playBalance = 1000;
         state.message = "Logged out";
       } else {
         state.screen = "login";
@@ -338,7 +370,17 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
       state.message = "";
       break;
     case "m":
+      if (!state.balanceReady) {
+        // Don't let the user juggle modes while we're still waiting on the
+        // server — the stale default would leak into the cache.
+        break;
+      }
       if (state.moneyMode === "play") {
+        // Stash current play balance before we overwrite state.balance with
+        // the real-money figure, so the reverse toggle can restore it. The
+        // render hook normally keeps playBalance in sync, but we capture
+        // explicitly here to be resilient to any in-flight async updates.
+        state.playBalance = state.balance;
         state.moneyMode = "real";
         state.balance = Number(BigInt(state.wallet.usdcBalance || "0")) / 1_000_000;
         state.message = "Switched to Real Money mode";
@@ -358,8 +400,34 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
         }
       } else {
         state.moneyMode = "play";
-        state.balance = 1000;
+        // Restore last-known play balance (cached by the render hook while
+        // we were in play mode). Do NOT hardcode to 1000 — that wipes any
+        // progress from prior rounds.
+        state.balance = state.playBalance;
         state.message = "Switched to Play Money mode";
+        // Refresh from server in the background so the cache stays fresh
+        // against any changes made elsewhere (e.g. another session).
+        //
+        // IMPORTANT: between firing the request and its resolution the user
+        // can navigate into a game and place bets — if we blindly
+        // overwrote state.balance on resolution we'd erase those wagers.
+        // Snapshot the local balance at request time and only apply the
+        // server's value if the user has stayed on the menu AND the local
+        // balance hasn't been mutated by game logic in the meantime.
+        if (state.auth.loggedIn) {
+          const snapshotBalance = state.balance;
+          import("./auth/client").then(({ getMe }) => {
+            getMe(state.auth.token).then((res) => {
+              if (res.error || typeof res.balance !== "number") return;
+              if (state.moneyMode !== "play") return;
+              if (state.screen !== "menu") return;
+              if (state.balance !== snapshotBalance) return;
+              state.balance = res.balance / 100;
+              state.playBalance = state.balance;
+              render();
+            }).catch(() => {});
+          });
+        }
       }
       break;
     case "r":

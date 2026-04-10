@@ -124,6 +124,8 @@ function submitCode(state: AppState, render: () => void): void {
 
     // Sync balance from server
     state.balance = res.user.balance / 100; // server stores cents
+    state.playBalance = state.balance;
+    state.balanceReady = true;
 
     // Return to menu
     state.screen = "menu";
@@ -150,16 +152,30 @@ function submitCode(state: AppState, render: () => void): void {
 
 /** Verify existing token on startup. Returns true if valid. */
 export async function verifySession(state: AppState): Promise<boolean> {
-  if (!state.auth.token) return false;
+  if (!state.auth.token) {
+    // No token to verify — we're effectively unauthed, so the local default
+    // IS the authoritative balance. Mark ready so the UI unblocks.
+    state.balanceReady = true;
+    return false;
+  }
 
   try {
     const res = await getMe(state.auth.token);
     if (res.error) {
+      // Token is bad (expired, revoked, etc.). Clear auth so the user can
+      // sign in again. Do NOT overwrite state.balance — the user may have
+      // placed bets against the pre-verify default and we don't want to
+      // erase them. Leaving balanceReady false keeps the UI gated until
+      // they sign in fresh, which is the correct flow when a token goes
+      // bad mid-session.
       clearAuth();
       state.auth.loggedIn = false;
       state.auth.token = "";
       state.auth.email = "";
       state.auth.userId = 0;
+      // Unauthed from now on — the local default becomes authoritative
+      // again because there's no server balance to await.
+      state.balanceReady = true;
       return false;
     }
 
@@ -167,9 +183,21 @@ export async function verifySession(state: AppState): Promise<boolean> {
     state.auth.userId = res.id;
     state.auth.loggedIn = true;
     state.balance = res.balance / 100; // server stores cents
+    state.playBalance = state.balance;
+    state.balanceReady = true;
     return true;
   } catch {
-    return false; // offline, keep local state
+    // Offline: we genuinely don't know the authoritative balance. Leave
+    // balanceReady=false so the UI keeps showing "…" and refuses to enter
+    // a game until we can reconnect. Don't touch state.balance — the next
+    // online sync (or a manual sign-out) will resolve the state.
+    //
+    // Note: this is intentionally stricter than the previous behavior,
+    // which unblocked the UI against the local $1000 default. Unblocking
+    // would let the user play against fabricated money and then sync that
+    // fabricated balance back to the server on next reconnect, clobbering
+    // whatever was actually there.
+    return false;
   }
 }
 
@@ -177,6 +205,10 @@ export async function verifySession(state: AppState): Promise<boolean> {
 export function syncBalanceToServer(state: AppState): void {
   if (!state.auth.loggedIn || !state.auth.token) return;
   if (state.moneyMode === "real") return; // real money balance comes from on-chain USDC
+  // Don't clobber the server with a stale local default if we haven't
+  // received the authoritative balance yet (e.g. user quits immediately
+  // after launch while verifySession is still in flight).
+  if (!state.balanceReady) return;
   syncBalance(state.auth.token, Math.round(state.balance * 100)).catch(() => {});
 }
 

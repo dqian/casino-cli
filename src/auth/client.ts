@@ -154,3 +154,39 @@ export async function withdrawRequest(token: string, to: string, amount: string)
 export async function withdrawConfirm(token: string, to: string, amount: string, code: string): Promise<WithdrawResponse> {
   return post("/wallet/withdraw/confirm", { to, amount, code }, token);
 }
+
+// Games — roulette
+
+/** Wire shape for a single bet sent to the server. `bet` matches the cli's BetType structurally. */
+export interface RouletteBetWire {
+  bet: unknown;       // BetType — kept loose here so client.ts has zero game-type imports
+  amount: string;     // integer base units (cents for play money) as string for JSON precision
+}
+
+export interface RouletteWinWire {
+  bet: unknown;
+  amount: string;
+  payout: string;
+}
+
+export interface RouletteRoundResponse {
+  roundId?: string;
+  winningNumber?: number;
+  wins?: RouletteWinWire[];
+  totalStake?: string;
+  totalPayout?: string;
+  balanceAfter?: string;
+  currency?: string;
+  serverSeedHash?: string;
+  error?: string;
+  code?: string;
+}
+
+export async function playRouletteRound(
+  token: string,
+  account: "play" | "real",
+  bets: RouletteBetWire[],
+  clientSeed?: string,
+): Promise<RouletteRoundResponse> {
+  return post("/games/roulette/rounds", { account, bets, clientSeed }, token);
+}
