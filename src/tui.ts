@@ -1,11 +1,13 @@
-import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, GameOptions, GameModule, AuthState } from "./types";
+import type { AppState, RouletteState, BlackjackState, PaiGowState, CrapsState, BaccaratState, GameOptions, GameModule, AuthState } from "./types";
 import { parseKey } from "./keybindings";
 import { renderScreen, MENU_ITEMS } from "./renderer";
 import * as t from "./theme";
 import { createShoe } from "./shared/cards";
 import { newBjRound } from "./blackjack/game";
+import { newRound as newBaccaratRound } from "./baccarat/game";
 import { handleRouletteKey } from "./roulette/handler";
 import { handleBlackjackKey } from "./blackjack/handler";
+import { handleBaccaratKey } from "./baccarat/handler";
 import { renderRouletteScreen, renderHotkeyGrid as renderRouletteHotkeys } from "./roulette/renderer";
 import { renderBlackjackScreen, renderBjHotkeyGrid } from "./blackjack/renderer";
 import { handlePaiGowKey } from "./paigow/handler";
@@ -14,6 +16,7 @@ import { createPaiGowState, newRound as newPaiGowRound } from "./paigow/game";
 import { handleCrapsKey } from "./craps/handler";
 import { renderCrapsScreen, renderCrapsHotkeys } from "./craps/renderer";
 import { createCrapsState } from "./craps/game";
+import { renderBaccaratScreen, renderBaccaratHotkeys } from "./baccarat/renderer";
 import { handleLoginKey, verifySession, syncBalanceToServer, serverResetBalance } from "./auth/handler";
 import { loadAuth, clearAuth } from "./auth/store";
 import { handleDepositKey, handleWithdrawKey, loadWallet } from "./wallet/handler";
@@ -41,6 +44,11 @@ export const GAMES: Record<string, GameModule> = {
     render: renderCrapsScreen,
     renderHotkeys: renderCrapsHotkeys,
   },
+  baccarat: {
+    handleKey: handleBaccaratKey,
+    render: renderBaccaratScreen,
+    renderHotkeys: renderBaccaratHotkeys,
+  },
 };
 
 // --- State creation ---
@@ -50,6 +58,7 @@ function createDefaultOptions(): GameOptions {
     roulette: { defaultWheelMode: "ball", tableMax: null },
     blackjack: { numDecks: 2 },
     paigow: { defaultSort: "descending", coloredSuits: true },
+    baccarat: { numDecks: 8 },
   };
 }
 
@@ -84,6 +93,23 @@ function createRouletteState(options: GameOptions): RouletteState {
 function randomCutCard(numDecks: number): number {
   const base = numDecks * 5;
   return base + Math.floor(Math.random() * (numDecks * 15 + 1));
+}
+
+function createBaccaratState(options: GameOptions): BaccaratState {
+  const nd = options.baccarat.numDecks;
+  return {
+    phase: "betting",
+    shoe: createShoe(nd),
+    cutCard: randomCutCard(nd),
+    numDecks: nd,
+    playerCards: [],
+    bankerCards: [],
+    betAmount: 25,
+    betType: "player",
+    winAmount: 0,
+    resultMessage: "",
+    cardAnim: null,
+  };
 }
 
 function createBlackjackState(options: GameOptions): BlackjackState {
@@ -154,6 +180,7 @@ function createState(): AppState {
     blackjack: createBlackjackState(options),
     paigow: createPaiGowState(options),
     craps: createCrapsState(),
+    baccarat: createBaccaratState(options),
     options,
     optionsCursor: 0,
     auth,
@@ -338,6 +365,14 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
           newPaiGowRound(state);
         } else if (item.screen === "craps") {
           state.craps = createCrapsState();
+        } else if (item.screen === "baccarat") {
+          const optDecks = state.options.baccarat.numDecks;
+          if (state.baccarat.numDecks !== optDecks) {
+            state.baccarat.shoe = createShoe(optDecks);
+            state.baccarat.numDecks = optDecks;
+            state.baccarat.cutCard = randomCutCard(optDecks);
+          }
+          newBaccaratRound(state);
         }
         state.message = "";
       } else {
@@ -501,10 +536,11 @@ function handleMenuKey(state: AppState, key: ReturnType<typeof parseKey>, exit: 
 const WHEEL_MODES = ["ball", "arrow"] as const;
 const TABLE_MAX_OPTIONS: (number | null)[] = [null, 100, 500, 1000, 5000, 10000];
 const DECK_OPTIONS = [1, 2, 4, 6, 8];
+const BACCARAT_DECK_OPTIONS = [4, 6, 8];
 
 function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): void {
   const opts = state.options;
-  const total = 5;
+  const total = 6;
 
   switch (key.name) {
     case "up":
@@ -541,6 +577,12 @@ function handleOptionsKey(state: AppState, key: ReturnType<typeof parseKey>): vo
         }
         case 4: {
           opts.paigow.coloredSuits = !opts.paigow.coloredSuits;
+          break;
+        }
+        case 5: {
+          const idx = BACCARAT_DECK_OPTIONS.indexOf(opts.baccarat.numDecks);
+          const next = Math.max(0, Math.min(BACCARAT_DECK_OPTIONS.length - 1, idx + dir));
+          opts.baccarat.numDecks = BACCARAT_DECK_OPTIONS[next]!;
           break;
         }
       }

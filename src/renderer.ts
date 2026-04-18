@@ -10,11 +10,11 @@ export const MENU_ITEMS: MenuItem[] = [
   { name: "Blackjack", screen: "blackjack", label: "2-Deck, 3:2" },
   { name: "Pai Gow Poker", screen: "paigow", label: "53-Card, House Way" },
   { name: "Craps", screen: "craps", label: "Standard Casino" },
-  { name: "Baccarat", screen: null, label: "Coming Soon" },
+  { name: "Baccarat", screen: "baccarat", label: "8-Deck, Punto Banco" },
 ];
 
 export function renderScreen(state: AppState): void {
-  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow" || state.screen === "craps") {
+  if (state.screen === "roulette" || state.screen === "blackjack" || state.screen === "paigow" || state.screen === "craps" || state.screen === "baccarat") {
     renderGameScreen(state);
     return;
   }
@@ -138,7 +138,9 @@ function renderMenuScreen(state: AppState): void {
       ? "Coming Soon"
       : item.screen === "blackjack"
         ? `${state.options.blackjack.numDecks}-Deck, 3:2`
-        : item.label;
+        : item.screen === "baccarat"
+          ? `${state.options.baccarat.numDecks}-Deck, Punto Banco`
+          : item.label;
 
     let line: string;
     if (selected && available) {
@@ -267,6 +269,11 @@ function renderOptionsScreen(state: AppState): void {
   lines.push(`  ${t.cyan}${t.bold}PAI GOW POKER${t.reset}`);
   lines.push(optRow(3, "Default Sort", opts.paigow.defaultSort === "ascending" ? "Asc" : "Desc"));
   lines.push(optRow(4, "Colored Suits", opts.paigow.coloredSuits ? "On" : "Off"));
+  lines.push("");
+
+  // Baccarat section
+  lines.push(`  ${t.cyan}${t.bold}BACCARAT${t.reset}`);
+  lines.push(optRow(5, "Number of Decks", `${opts.baccarat.numDecks}`));
   lines.push("");
 
   // Fill
